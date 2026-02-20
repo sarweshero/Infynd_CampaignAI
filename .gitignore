@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+
+# Virtual environments
+.venv
+venv/
+ENV/
+
+# VSCode
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+uvicorn.log
+
+# Environment
+.env
+.env.*
+
+# Database
+*.sqlite3
+*.db
+
+# Alembic
+alembic/versions/
+
+# Jupyter
+*.ipynb_checkpoints/
+
+# Node/npm
+node_modules/
+
+# Misc
+*.bak
+*.swp
+*.swo
+*.tmp
