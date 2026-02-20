@@ -1,10 +1,20 @@
 """
 WebSocket Approval System.
 WS /api/v1/ws/campaigns/{campaign_id}?token=<jwt>
-Supports: approve, approve_all, edit, regenerate actions.
-Contacts are grouped by channel (Email → LinkedIn → Call) with CHANNEL_GROUP_START messages.
-After all contacts are approved, dispatch is triggered automatically.
+
+Content structure: generated_content = {
+    "common":   { "Email": {subject, body, cta_link}, "LinkedIn": {...}, "Call": {...} },
+    "contacts": { "email@example.com": "Email", ... }
+}
+
+Flow:
+1. Send APPROVAL_START with channel list and contact counts.
+2. For each channel, send the common template for review.
+3. Client can: approve, edit, regenerate per channel.
+4. After all channels approved -> mark campaign APPROVED -> trigger dispatch.
 """
+import asyncio
+import copy
 import json
 import logging
 import uuid
@@ -18,6 +28,7 @@ from app.core.database import AsyncSessionLocal
 from app.core.dependencies import get_ws_user
 from app.models.campaign import Campaign, PipelineState
 from app.models.pipeline import PipelineRun
+from app.services.dispatch_service import dispatch_campaign
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["WebSocket"])
@@ -29,11 +40,11 @@ CHANNEL_ORDER: List[str] = ["Email", "LinkedIn", "Call"]
 async def campaign_approval_ws(websocket: WebSocket, campaign_id: str):
     """
     WebSocket endpoint for human-in-the-loop campaign approval.
-    Sends each contact's content, awaits approve/edit/regenerate actions.
+    Sends each channel's common template for review.
+    Supports: approve, approve_all, edit, regenerate actions.
     """
     await websocket.accept()
 
-    # Authenticate via token query param
     try:
         current_user = await get_ws_user(websocket)
     except Exception:
@@ -59,60 +70,47 @@ async def campaign_approval_ws(websocket: WebSocket, campaign_id: str):
                 return
 
             generated_content: Dict[str, Any] = campaign.generated_content or {}
+            common: Dict[str, Any] = generated_content.get("common", {})
+            contacts_map: Dict[str, str] = generated_content.get("contacts", {})
 
-            # Support new generated_content shape with `common` + `personalized`
-            # personalized: { "alice@x.com": { channel, content }, ... }
-            _RESERVED = {"common", "personalized"}
-            if isinstance(generated_content.get("personalized"), dict):
-                personalized = generated_content["personalized"]
-            else:
-                # Fallback: top-level keys are contact emails; skip structural keys
-                personalized = {k: v for k, v in generated_content.items() if k not in _RESERVED}
+            # Count contacts per channel
+            channel_counts: Dict[str, int] = {}
+            for email, ch in contacts_map.items():
+                channel_counts[ch] = channel_counts.get(ch, 0) + 1
 
-            # ── Group and order contacts: Email → LinkedIn → Call ──────────────
-            grouped: Dict[str, List[str]] = {ch: [] for ch in CHANNEL_ORDER}
-            for email_key, data in personalized.items():
-                ch = (data or {}).get("channel", "Email")
-                bucket = ch if ch in grouped else "Email"
-                grouped[bucket].append(email_key)
-
-            ordered_emails: List[str] = []
-            for ch in CHANNEL_ORDER:
-                ordered_emails.extend(grouped[ch])
-
-            pending_emails = list(ordered_emails)
-            approved_emails = []
+            channels = [ch for ch in CHANNEL_ORDER if ch in common]
+            total_contacts = sum(channel_counts.values())
 
             await websocket.send_json({
                 "type": "APPROVAL_START",
                 "campaign_id": str(campaign_uuid),
-                "total_contacts": len(pending_emails),
-                "channel_counts": {ch: len(grouped[ch]) for ch in CHANNEL_ORDER},
+                "total_contacts": total_contacts,
+                "channel_counts": channel_counts,
+                "channels": channels,
             })
 
-            current_channel: str = ""
-            for contact_email in list(pending_emails):
-                contact_data = personalized.get(contact_email, {})
-                contact_channel = contact_data.get("channel", "Email")
+            approved_channels: List[str] = []
+            pending_channels = list(channels)
 
-                # Emit channel group header when channel changes
-                if contact_channel != current_channel:
-                    current_channel = contact_channel
-                    await websocket.send_json({
-                        "type": "CHANNEL_GROUP_START",
-                        "channel": current_channel,
-                        "count": len(grouped.get(current_channel, [])),
-                    })
+            for channel in list(pending_channels):
+                template = common.get(channel, {})
 
                 await websocket.send_json({
-                    "type": "CONTACT_CONTENT",
-                    "contact_email": contact_email,
-                    "channel": contact_data.get("channel"),
-                    "content": contact_data.get("content"),
-                    "index": ordered_emails.index(contact_email),
+                    "type": "CHANNEL_GROUP_START",
+                    "channel": channel,
+                    "count": channel_counts.get(channel, 0),
                 })
 
-                # Wait for client action on this contact
+                await websocket.send_json({
+                    "type": "CHANNEL_CONTENT",
+                    "channel": channel,
+                    "content": template,
+                    "contact_count": channel_counts.get(channel, 0),
+                    "contacts": [
+                        email for email, ch in contacts_map.items() if ch == channel
+                    ][:20],
+                })
+
                 while True:
                     try:
                         raw = await websocket.receive_text()
@@ -127,101 +125,86 @@ async def campaign_approval_ws(websocket: WebSocket, campaign_id: str):
                     action_type = action.get("action")
 
                     if action_type == "approve":
-                        approved_emails.append(contact_email)
-                        pending_emails.remove(contact_email)
+                        approved_channels.append(channel)
+                        pending_channels.remove(channel)
                         await websocket.send_json({
-                            "type": "APPROVED",
-                            "contact_email": contact_email,
+                            "type": "CHANNEL_APPROVED",
+                            "channel": channel,
                         })
                         break
 
                     elif action_type == "approve_all":
-                        for remaining_email in pending_emails[:]:
-                            approved_emails.append(remaining_email)
-                            pending_emails.remove(remaining_email)
+                        for remaining in pending_channels[:]:
+                            approved_channels.append(remaining)
+                            pending_channels.remove(remaining)
                         await websocket.send_json({
                             "type": "ALL_APPROVED",
-                            "approved_count": len(approved_emails),
+                            "approved_count": len(approved_channels),
                         })
                         break
 
                     elif action_type == "edit":
                         edited_content = action.get("edited_content")
-                        if edited_content:
-                            generated_content[contact_email]["content"] = edited_content
+                        if edited_content and isinstance(edited_content, dict):
+                            new_gc = copy.deepcopy(generated_content)
+                            new_gc["common"][channel] = edited_content
                             await db.execute(
                                 update(Campaign)
                                 .where(Campaign.id == campaign_uuid)
-                                .values(generated_content=generated_content)
+                                .values(generated_content=new_gc)
                             )
                             await db.commit()
-                            await db.refresh(campaign)
+                            generated_content = new_gc
+                            common = new_gc.get("common", {})
                         await websocket.send_json({
                             "type": "CONTENT_UPDATED",
-                            "contact_email": contact_email,
+                            "channel": channel,
                         })
-                        # Re-send updated content for review
                         await websocket.send_json({
-                            "type": "CONTACT_CONTENT",
-                            "contact_email": contact_email,
-                            "channel": generated_content[contact_email].get("channel"),
-                            "content": generated_content[contact_email].get("content"),
+                            "type": "CHANNEL_CONTENT",
+                            "channel": channel,
+                            "content": common.get(channel, {}),
+                            "contact_count": channel_counts.get(channel, 0),
                         })
                         continue
 
                     elif action_type == "regenerate":
                         await websocket.send_json({
                             "type": "REGENERATING",
-                            "contact_email": contact_email,
+                            "channel": channel,
                         })
-                        # Re-trigger content generation for this single contact
-                        from app.agents.content_generator_agent import _call_ollama, PROMPT_MAP, _personalization_hint
-                        from sqlalchemy import select as sa_select
-                        from app.models.contact import Contact
-                        contact_result = await db.execute(
-                            sa_select(Contact).where(Contact.email == contact_email)
-                        )
-                        contact_record = contact_result.scalar_one_or_none()
-                        if contact_record:
-                            channel = generated_content[contact_email].get("channel", "Email")
-                            template = PROMPT_MAP.get(channel)
-                            contact_dict = {
-                                "name": contact_record.name,
-                                "role": contact_record.role,
-                                "company": contact_record.company,
-                                "emailclickrate": contact_record.emailclickrate,
-                                "linkedinclickrate": contact_record.linkedinclickrate,
-                                "callanswerrate": contact_record.callanswerrate,
-                                "preferredtime": contact_record.preferredtime,
-                            }
-                            hint = _personalization_hint(contact_dict)
-                            prompt_str = template.format(
-                                **contact_dict,
-                                campaign_purpose=campaign.campaign_purpose or "",
-                                product_link=campaign.product_link or "",
-                                prompt=campaign.prompt or "",
-                                personalization_hint=hint,
+                        from app.agents.content_generator_agent import _call_ollama, PROMPT_MAP
+                        base_prompt = PROMPT_MAP.get(channel)
+                        if base_prompt:
+                            prompt_str = (
+                                base_prompt
+                                .replace("{{campaign_purpose}}", campaign.campaign_purpose or "")
+                                .replace("{{product_link}}", campaign.product_link or "")
+                                .replace("{{prompt}}", campaign.prompt or "")
                             )
                             try:
-                                new_content = await _call_ollama(prompt_str)
-                                generated_content[contact_email]["content"] = new_content
+                                new_template = await _call_ollama(prompt_str)
+                                new_gc = copy.deepcopy(generated_content)
+                                new_gc["common"][channel] = new_template
                                 await db.execute(
                                     update(Campaign)
                                     .where(Campaign.id == campaign_uuid)
-                                    .values(generated_content=generated_content)
+                                    .values(generated_content=new_gc)
                                 )
                                 await db.commit()
+                                generated_content = new_gc
+                                common = new_gc.get("common", {})
                             except Exception as regen_err:
                                 await websocket.send_json({
                                     "type": "REGENERATE_FAILED",
-                                    "contact_email": contact_email,
+                                    "channel": channel,
                                     "error": str(regen_err),
                                 })
                         await websocket.send_json({
-                            "type": "CONTACT_CONTENT",
-                            "contact_email": contact_email,
-                            "channel": generated_content[contact_email].get("channel"),
-                            "content": generated_content[contact_email].get("content"),
+                            "type": "CHANNEL_CONTENT",
+                            "channel": channel,
+                            "content": common.get(channel, {}),
+                            "contact_count": channel_counts.get(channel, 0),
                         })
                         continue
 
@@ -231,11 +214,10 @@ async def campaign_approval_ws(websocket: WebSocket, campaign_id: str):
                             "code": "UNKNOWN_ACTION",
                         })
 
-                # Break outer loop if approve_all was triggered
-                if not pending_emails:
+                if not pending_channels:
                     break
 
-            # All contacts processed — mark approved
+            # All channels approved -> mark campaign APPROVED
             await db.execute(
                 update(Campaign)
                 .where(Campaign.id == campaign_uuid)
@@ -249,7 +231,7 @@ async def campaign_approval_ws(websocket: WebSocket, campaign_id: str):
             await db.execute(
                 update(PipelineRun)
                 .where(PipelineRun.campaign_id == campaign_uuid)
-                .values(state=PipelineState.APPROVED)
+                .values(state="APPROVED")
             )
             await db.commit()
 
@@ -257,15 +239,12 @@ async def campaign_approval_ws(websocket: WebSocket, campaign_id: str):
                 "type": "CAMPAIGN_APPROVED",
                 "campaign_id": str(campaign_uuid),
                 "approved_by": current_user.email,
-                "approved_count": len(approved_emails),
+                "approved_channels": approved_channels,
             })
 
             logger.info(f"[WS] Campaign {campaign_id} fully approved by {current_user.email}")
 
-            # Trigger dispatch asynchronously (new session — this WS session stays open)
-            import asyncio
-            from app.services.dispatch_service import dispatch_campaign
-
+            # Trigger dispatch asynchronously
             async def _dispatch():
                 async with AsyncSessionLocal() as dispatch_db:
                     await dispatch_campaign(dispatch_db, str(campaign_uuid))

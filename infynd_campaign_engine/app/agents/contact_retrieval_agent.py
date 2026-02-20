@@ -125,6 +125,46 @@ async def run_contact_retrieval_agent(
         rows = result.mappings().all()
         contacts = [dict(row) for row in rows]
 
+        # ── Fallback: progressively relax filters if no contacts found ───
+        if not contacts:
+            filters = (classification.get("filters") or {})
+            # Order of filter relaxation: company → location → category → role
+            relax_keys = ["company", "location", "category", "role"]
+            relaxed = dict(filters)
+            for key in relax_keys:
+                if not relaxed.get(key):
+                    continue
+                logger.info(
+                    f"[ContactRetrievalAgent] 0 contacts — relaxing filter '{key}' "
+                    f"(was: {relaxed[key]!r})"
+                )
+                relaxed[key] = ""
+                query_str, params = _build_contact_query({"filters": relaxed})
+                result = await db.execute(text(query_str), params)
+                rows = result.mappings().all()
+                contacts = [dict(row) for row in rows]
+                if contacts:
+                    break
+
+        # ── Ultimate fallback: return top contacts by ICP score ──────────
+        if not contacts:
+            logger.warning(
+                f"[ContactRetrievalAgent] All filters exhausted — returning top contacts"
+            )
+            fallback_query = """
+                SELECT c.id, c.email, c.name, c.role, c.company, c.location,
+                       c.category, c.emailclickrate, c.linkedinclickrate,
+                       c.callanswerrate, c.preferredtime,
+                       COALESCE(icp.buying_probability_score, 0) AS buying_probability_score
+                FROM contacts c
+                LEFT JOIN icp_results icp ON icp.contact_id = c.id
+                ORDER BY buying_probability_score DESC NULLS LAST
+                LIMIT 50
+            """
+            result = await db.execute(text(fallback_query))
+            rows = result.mappings().all()
+            contacts = [dict(row) for row in rows]
+
         # Serialize UUIDs to string for JSON storage
         serializable_contacts = []
         for c in contacts:

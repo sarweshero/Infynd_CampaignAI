@@ -2,29 +2,28 @@ import logging
 import uuid
 from typing import List
 from io import BytesIO
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, func
+from pydantic import BaseModel
 
-from app.core.database import get_db
+from app.core.database import get_db, AsyncSessionLocal
 from app.core.dependencies import get_current_user, require_roles, TokenData
 from app.models.campaign import Campaign, PipelineState
 from app.models.pipeline import CampaignLog
-from app.models.tracking import OutboundMessage
+from app.models.contact import Contact
+from app.models.tracking import OutboundMessage, EngagementHistory
 from app.schemas.campaign import (
     CampaignCreate, CampaignResponse, ContentEditRequest,
     ErrorResponse, LogEntry, MessageEntry,
 )
 from app.services.pipeline_runner import execute_pipeline
 from app.services.dispatch_service import dispatch_campaign
+from app.services.sendgrid_service import send_email
 from app.services.tts_service import list_voices, synthesize_wav
-from app.core.database import AsyncSessionLocal
-from app.models.contact import Contact
-from app.models.tracking import OutboundMessage, EngagementHistory
-from datetime import datetime
-from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/campaigns", tags=["Campaigns"])
@@ -165,7 +164,8 @@ async def edit_contact_content(
     db: AsyncSession = Depends(get_db),
     current_user: TokenData = Depends(require_roles(["ADMIN", "MANAGER"])),
 ):
-    """Edit generated content for a specific contact before approval."""
+    """Edit generated content for a specific contact's channel template before approval."""
+    import copy
     result = await db.execute(select(Campaign).where(Campaign.id == campaign_id))
     campaign = result.scalar_one_or_none()
     if not campaign:
@@ -179,15 +179,18 @@ async def edit_contact_content(
             detail={"detail": "Content can only be edited before approval", "code": "INVALID_STATE"},
         )
     content = campaign.generated_content or {}
-    personalized = content.get("personalized", {})
-    if contact_email not in personalized:
+    contacts_map = content.get("contacts", {})
+    if contact_email not in contacts_map:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"detail": "Contact not found in generated content", "code": "CONTACT_NOT_FOUND"},
         )
-    import copy
+    # Edit the common template for this contact's channel
+    channel = contacts_map[contact_email]
     new_content = copy.deepcopy(content)
-    new_content["personalized"][contact_email]["content"] = payload.content
+    if "common" not in new_content:
+        new_content["common"] = {}
+    new_content["common"][channel] = payload.content
     await db.execute(update(Campaign).where(Campaign.id == campaign_id).values(generated_content=new_content))
     await db.commit()
     return {"message": "Content updated", "contact_email": contact_email}
@@ -232,7 +235,7 @@ async def edit_common_content(
 async def get_common_content_audio(
     campaign_id: uuid.UUID,
     channel: str,
-    rate: int = Query(default=168, ge=120, le=220),
+    rate: int = Query(default=168, ge=100, le=300),
     voice_id: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: TokenData = Depends(get_current_user),
@@ -261,7 +264,7 @@ async def get_common_content_audio(
             detail={"detail": "Call template not found in common content", "code": "NOT_FOUND"},
         )
 
-    field_order = ["greeting", "value_prop", "objection_handler", "closing", "cta"]
+    field_order = ["greeting", "value_proposition", "value_prop", "objection_handling", "objection_handler", "closing", "cta", "cta_link"]
     chunks = []
     for key in field_order:
         value = call_template.get(key)
@@ -339,7 +342,6 @@ async def approve_campaign(
     current_user: TokenData = Depends(require_roles(["ADMIN", "MANAGER"])),
 ):
     """Approve entire campaign and trigger dispatch."""
-    from datetime import datetime
     result = await db.execute(select(Campaign).where(Campaign.id == campaign_id))
     campaign = result.scalar_one_or_none()
     if not campaign:
@@ -488,10 +490,14 @@ async def send_preview(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"detail": "Campaign not found", "code": "NOT_FOUND"})
 
     generated = campaign.generated_content or {}
-    personalized = generated.get("personalized") or {}
+    contacts_map = generated.get("contacts", {})
+    common = generated.get("common", {})
 
     contact_email = payload.contact_email
-    contact_data = personalized.get(contact_email) or {}
+
+    # Determine the channel assigned to this contact
+    channel = contacts_map.get(contact_email, "Email")
+    content = common.get(channel, {})
 
     # Fetch contact record for substitution
     contact_record = None
@@ -500,15 +506,6 @@ async def send_preview(
         contact_record = cr.scalar_one_or_none()
     except Exception:
         contact_record = None
-
-    # Compose content
-    if isinstance(contact_data, dict) and contact_data:
-        channel = contact_data.get("channel", "Email")
-        content = contact_data.get("content", {})
-    else:
-        common = generated.get("common", {})
-        channel = (common.get("channel") or "Email")
-        content = common.get("content") or {}
 
     if channel != "Email":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"detail": "Preview only supported for Email channel", "code": "INVALID_CHANNEL"})
@@ -550,8 +547,8 @@ async def send_preview(
     send_status = "SENT" if provider_message_id else "FAILED"
 
 
-    # Prevent creation for invalid contact_email
-    if contact_email not in ("common", "personalized") and "@" in contact_email:
+    # Prevent creation for invalid contact_email keys
+    if contact_email not in ("common", "contacts") and "@" in contact_email:
         msg = OutboundMessage(
             campaign_id=campaign_id,
             contact_email=contact_email,

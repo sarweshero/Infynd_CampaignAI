@@ -272,8 +272,8 @@ async def call_campaign_contacts(
 ) -> Dict[str, Any]:
     """
     Dispatch outbound calls to every contact in the campaign.
-    Contacts are sourced from generated_content['personalized'] keys
-    (these are the email addresses approved during human-in-the-loop review).
+    Contacts are sourced from generated_content['contacts'] map
+    (these are the email → channel assignments from the pipeline).
     Phone numbers are looked up in the contacts table.
     """
     campaign_uuid = uuid.UUID(campaign_id)
@@ -286,24 +286,25 @@ async def call_campaign_contacts(
             raise ValueError(f"Campaign {campaign_id} not found")
 
         generated: Dict[str, Any] = campaign.generated_content or {}
-        personalized_map: Dict[str, Any] = generated.get("personalized") or {}
-        call_script: str = generated.get("call_script") or generated.get("common", {}).get("Call", {}).get("body") or (
+        contacts_map: Dict[str, str] = generated.get("contacts") or {}
+        common_templates: Dict[str, Any] = generated.get("common") or {}
+        call_template = common_templates.get("Call", {})
+        call_script: str = " | ".join(
+            f"{k}: {v}" for k, v in call_template.items() if isinstance(v, str) and k != "cta_link"
+        ) or (
             f"We have an exciting opportunity that could benefit your company. "
             f"Campaign: {campaign.name}."
         )
 
         # Collect email → channel entries where channel is Call
-        contact_emails: List[str] = []
-        for email, entry in personalized_map.items():
-            if not isinstance(email, str) or "@" not in email:
-                continue
-            channel = (entry or {}).get("channel", "Email") if isinstance(entry, dict) else "Email"
-            if channel == "Call":
-                contact_emails.append(email)
+        contact_emails: List[str] = [
+            email for email, channel in contacts_map.items()
+            if isinstance(email, str) and "@" in email and channel == "Call"
+        ]
 
         # Fallback: if no Call-channel contacts, call everyone
         if not contact_emails:
-            contact_emails = [e for e in personalized_map.keys() if isinstance(e, str) and "@" in e]
+            contact_emails = [e for e in contacts_map.keys() if isinstance(e, str) and "@" in e]
 
         # Fetch contact records
         contacts_result = await db.execute(

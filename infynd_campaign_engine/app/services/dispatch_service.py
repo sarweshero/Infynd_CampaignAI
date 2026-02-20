@@ -3,12 +3,13 @@ Dispatch Service — sends the COMMON template to every contact, substituting
 per-contact placeholders (name, role, company, etc.) at send time.
 
 Strategy:
-  1. Extract contact emails from generated_content["personalized"] keys
-     (we only need the email addresses — the common template is used for content).
+  1. Extract contact emails from generated_content["contacts"] (email → channel map).
   2. For each email, determine the channel assigned to that contact.
   3. Fetch the Contact row from the DB for placeholder substitution.
   4. Take the common template for the channel, substitute all [PLACEHOLDER] tokens.
-  5. Send via the appropriate provider and record the result.
+  5. Email  → send via SendGrid.
+     Call   → initiate Twilio outbound call with voice agent.
+     LinkedIn → log (no API integration yet).
 """
 import json
 import logging
@@ -25,6 +26,7 @@ from app.models.contact import Contact
 from app.models.pipeline import PipelineRun
 from app.models.tracking import EngagementHistory, OutboundMessage
 from app.services.sendgrid_service import send_email
+from app.services.voice_agent import initiate_call
 
 logger = logging.getLogger(__name__)
 
@@ -85,36 +87,29 @@ async def dispatch_campaign(db: AsyncSession, campaign_id: str) -> None:
 
     generated: Dict[str, Any] = campaign.generated_content or {}
 
-    # Common email template — the single source of truth for content
+    # Common templates — keyed by channel name
     common_templates: Dict[str, Any] = generated.get("common") or {}
-    email_template: Dict[str, Any] = common_templates.get("Email") or {}
-    if not email_template:
-        logger.error(f"[Dispatch] Campaign {campaign_id} has no common Email template")
-        return
 
-    # Contact list: keys of the personalized map that look like email addresses
-    personalized_map: Dict[str, Any] = generated.get("personalized") or {}
+    # contacts map: { "email@domain.com": "Email" | "Call" | "LinkedIn" }
+    contacts_map: Dict[str, str] = generated.get("contacts") or {}
     contact_emails = [
-        email for email in personalized_map
+        email for email in contacts_map
         if isinstance(email, str) and "@" in email
     ]
+
     if not contact_emails:
-        logger.warning(f"[Dispatch] Campaign {campaign_id} has no contacts in personalized map")
+        logger.warning(f"[Dispatch] Campaign {campaign_id} has no contacts")
+        return
+
+    if not common_templates:
+        logger.error(f"[Dispatch] Campaign {campaign_id} has no common templates")
         return
 
     logger.info(f"[Dispatch] Campaign {campaign_id}: dispatching to {len(contact_emails)} contacts")
     dispatched_count = 0
 
     for contact_email in contact_emails:
-        channel = "Email"
-        entry = personalized_map.get(contact_email)
-        if isinstance(entry, dict) and entry.get("channel"):
-            channel = entry["channel"]
-
-        # Only handle Email channel here; skip Call/LinkedIn (handled by voice/linkedin services)
-        if channel != "Email":
-            logger.info(f"[Dispatch] Skipping non-Email channel {channel!r} for {contact_email}")
-            continue
+        channel = contacts_map.get(contact_email, "Email")
 
         # Idempotency guard
         existing = await db.execute(
@@ -137,59 +132,161 @@ async def dispatch_campaign(db: AsyncSession, campaign_id: str) -> None:
         except Exception as exc:
             logger.warning(f"[Dispatch] Could not fetch contact {contact_email}: {exc}")
 
-        # Deep-copy + substitute
-        import json as _json
-        content = _substitute(_json.loads(_json.dumps(email_template)), contact, campaign)
+        # ── EMAIL ─────────────────────────────────────────────────────────
+        if channel == "Email":
+            template = common_templates.get("Email") or {}
+            if not template:
+                logger.warning(f"[Dispatch] No Email template for {contact_email}")
+                continue
 
-        # Send
-        provider_message_id = None
-        send_status = "FAILED"
+            import json as _json
+            content = _substitute(_json.loads(_json.dumps(template)), contact, campaign)
 
-        subject = content.get("subject", f"Message from {campaign.name}") if isinstance(content, dict) else f"Message from {campaign.name}"
-        body = content.get("body", "") if isinstance(content, dict) else content
-        cta = content.get("cta_link", campaign.product_link or "") if isinstance(content, dict) else ""
-        html_body = (
-            f"<p>{body.replace(chr(10), '</p><p>')}</p>"
-            + (f'<br><p><a href="{cta}">{cta}</a></p>' if cta else "")
-        )
-        logger.info(f"[Dispatch] Sending Email → {contact_email}  subject={subject!r}")
-        try:
-            provider_message_id = await send_email(
-                to_email=contact_email,
-                subject=subject,
-                html_body=html_body,
-                campaign_id=str(campaign_uuid),
+            subject = content.get("subject", f"Message from {campaign.name}")
+            body    = content.get("body", "")
+            cta     = content.get("cta_link", campaign.product_link or "")
+            html_body = (
+                f"<p>{body.replace(chr(10), '</p><p>')}</p>"
+                + (f'<br><p><a href="{cta}">{cta}</a></p>' if cta else "")
             )
-            if provider_message_id:
-                send_status = "SENT"
-                logger.info(f"[Dispatch] ✓ Email sent to {contact_email} — msg_id={provider_message_id}")
-            else:
-                logger.error(f"[Dispatch] ✗ Email FAILED for {contact_email}")
-        except Exception as exc:
-            logger.error(f"[Dispatch] Exception sending to {contact_email}: {exc}")
-            send_status = "FAILED"
+
             provider_message_id = None
+            send_status = "FAILED"
+            logger.info(f"[Dispatch] Sending Email → {contact_email}  subject={subject!r}")
+            try:
+                provider_message_id = await send_email(
+                    to_email=contact_email,
+                    subject=subject,
+                    html_body=html_body,
+                    campaign_id=str(campaign_uuid),
+                )
+                send_status = "SENT" if provider_message_id else "FAILED"
+                if provider_message_id:
+                    logger.info(f"[Dispatch] ✓ Email sent to {contact_email}")
+                else:
+                    logger.error(f"[Dispatch] ✗ Email FAILED for {contact_email}")
+            except Exception as exc:
+                logger.error(f"[Dispatch] Exception sending email to {contact_email}: {exc}")
 
-        # Persist OutboundMessage
-        db.add(OutboundMessage(
-            campaign_id=campaign_uuid,
-            contact_email=contact_email,
-            channel=channel,
-            message_payload=json.dumps(content),
-            send_status=send_status,
-            provider_message_id=provider_message_id,
-            sent_at=datetime.utcnow() if send_status == "SENT" else None,
-        ))
-        db.add(EngagementHistory(
-            campaign_id=campaign_uuid,
-            contact_email=contact_email,
-            channel=channel,
-            event_type="SENT",
-            payload=content,
-            occurred_at=datetime.utcnow(),
-        ))
+            db.add(OutboundMessage(
+                campaign_id=campaign_uuid,
+                contact_email=contact_email,
+                channel=channel,
+                message_payload=json.dumps(content),
+                send_status=send_status,
+                provider_message_id=provider_message_id,
+                sent_at=datetime.utcnow() if send_status == "SENT" else None,
+            ))
+            db.add(EngagementHistory(
+                campaign_id=campaign_uuid,
+                contact_email=contact_email,
+                channel=channel,
+                event_type="SENT",
+                payload=content,
+                occurred_at=datetime.utcnow(),
+            ))
+            dispatched_count += 1
 
-        dispatched_count += 1
+        # ── CALL (Twilio voice agent) ──────────────────────────────────────
+        elif channel == "Call":
+            template = common_templates.get("Call") or {}
+            if not template:
+                logger.warning(f"[Dispatch] No Call template for {contact_email}")
+                continue
+
+            if not contact:
+                logger.warning(f"[Dispatch] No contact record for {contact_email} — cannot call")
+                continue
+
+            phone = (
+                getattr(contact, "phone_number", None)
+                or getattr(contact, "phoneno", None)
+                or getattr(contact, "phone", None)
+                or ""
+            )
+            phone = str(phone).strip().replace(" ", "")
+            if not phone:
+                logger.warning(f"[Dispatch] No phone number for {contact_email} — skipping call")
+                continue
+            if not phone.startswith("+"):
+                phone = "+91" + phone
+
+            # Build campaign context from the call template
+            call_script = " | ".join(
+                f"{k}: {v}" for k, v in template.items() if isinstance(v, str) and k != "cta_link"
+            )
+            contact_dict = {
+                "name":    getattr(contact, "name", ""),
+                "email":   contact_email,
+                "company": getattr(contact, "company", ""),
+                "role":    getattr(contact, "role", ""),
+            }
+            try:
+                call_result = await initiate_call(
+                    to_number=phone,
+                    contact=contact_dict,
+                    campaign_context=call_script,
+                    campaign_id=str(campaign_uuid),
+                )
+                logger.info(f"[Dispatch] ✓ Call initiated for {contact_email}: {call_result}")
+                send_status = "SENT"
+                provider_message_id = call_result.get("call_sid")
+            except Exception as exc:
+                logger.error(f"[Dispatch] ✗ Call FAILED for {contact_email}: {exc}")
+                send_status = "FAILED"
+                provider_message_id = None
+
+            db.add(OutboundMessage(
+                campaign_id=campaign_uuid,
+                contact_email=contact_email,
+                channel=channel,
+                message_payload=json.dumps(template),
+                send_status=send_status,
+                provider_message_id=provider_message_id,
+                sent_at=datetime.utcnow() if send_status == "SENT" else None,
+            ))
+            db.add(EngagementHistory(
+                campaign_id=campaign_uuid,
+                contact_email=contact_email,
+                channel=channel,
+                event_type="SENT",
+                payload=template,
+                occurred_at=datetime.utcnow(),
+            ))
+            dispatched_count += 1
+
+        # ── LINKEDIN ───────────────────────────────────────────────────────
+        elif channel == "LinkedIn":
+            template = common_templates.get("LinkedIn") or {}
+            if not template:
+                logger.warning(f"[Dispatch] No LinkedIn template for {contact_email}")
+                continue
+
+            import json as _json
+            content = _substitute(_json.loads(_json.dumps(template)), contact, campaign)
+            logger.info(f"[Dispatch] LinkedIn message prepared for {contact_email} (no API — logged only)")
+
+            db.add(OutboundMessage(
+                campaign_id=campaign_uuid,
+                contact_email=contact_email,
+                channel=channel,
+                message_payload=json.dumps(content),
+                send_status="SENT",
+                provider_message_id=None,
+                sent_at=datetime.utcnow(),
+            ))
+            db.add(EngagementHistory(
+                campaign_id=campaign_uuid,
+                contact_email=contact_email,
+                channel=channel,
+                event_type="SENT",
+                payload=content,
+                occurred_at=datetime.utcnow(),
+            ))
+            dispatched_count += 1
+
+        else:
+            logger.warning(f"[Dispatch] Unknown channel {channel!r} for {contact_email} — skipping")
 
     # Commit all rows
     await db.execute(

@@ -73,6 +73,7 @@ def generate_contact():
     linkedinclickrate = maybe_null(round(random.uniform(0.0, 1.0), 2))
     callanswerrate = maybe_null(random.choice(CALL_ANSWER_RATE))
     preferredtime = maybe_null(random.choice(PREFERRED_TIMES))
+    phone = maybe_null(fake.phone_number(), probability=0.3)  # ~70% of contacts have a phone
     created_at = datetime.now() - timedelta(days=random.randint(0, 365))
     updated_at = created_at + timedelta(days=random.randint(0, 30))
     return (
@@ -86,6 +87,7 @@ def generate_contact():
         linkedinclickrate,
         callanswerrate,
         preferredtime,
+        phone,
         created_at,
         updated_at
     )
@@ -102,8 +104,8 @@ def seed_database():
     INSERT INTO contacts (
         email, name, role, company, location, category,
         emailclickrate, linkedinclickrate, callanswerrate, preferredtime,
-        created_at, updated_at
-    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        phone_number, created_at, updated_at
+    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     ON CONFLICT (email) DO NOTHING;
     """
 

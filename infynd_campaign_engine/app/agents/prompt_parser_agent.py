@@ -47,6 +47,7 @@ async def _call_ollama(prompt: str) -> str:
             json={
                 "model": settings.OLLAMA_MODEL,
                 "prompt": prompt,
+                "format": "json",  # strict JSON mode — no markdown wrapping
                 "stream": False,
             },
         )

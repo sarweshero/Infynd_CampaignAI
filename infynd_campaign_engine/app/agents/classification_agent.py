@@ -30,12 +30,18 @@ Campaign Information:
 Return a valid JSON object ONLY with no extra text, in exactly this format:
 {{
   "filters": {{
-    "role": "<target role or empty string>",
-    "location": "<target location or empty string>",
-    "category": "<industry category or empty string>",
-    "company": "<target company type or empty string>"
+    "role": "<target job titles/roles like CTO, Engineer, etc. — comma-separated if multiple, or empty string>",
+    "location": "<specific city/country or empty string — do NOT use generic terms like 'global'>",
+    "category": "<industry vertical like Technology, Finance, Healthcare, SaaS, AI, etc. — or empty string>",
+    "company": "<specific target company name — or empty string. Do NOT write descriptions like 'mid-size' or 'enterprise-level'. Only use a concrete company name.>"
   }}
 }}
+
+Rules:
+- role: use concrete job titles (CTO, Developer, Product Manager, etc.)
+- company: leave EMPTY unless a specific company name is mentioned as a target
+- location: leave EMPTY unless a specific city/region/country is mentioned
+- category: pick the closest industry vertical
 """
 
 
@@ -46,6 +52,7 @@ async def _call_ollama(prompt: str) -> str:
             json={
                 "model": settings.OLLAMA_MODEL,
                 "prompt": prompt,
+                "format": "json",  # strict JSON mode — no markdown wrapping
                 "stream": False,
             },
         )
@@ -115,18 +122,39 @@ async def run_classification_agent(
         return classification
 
     except Exception as exc:
-        completed_at = datetime.utcnow()
-        duration_ms = int((completed_at - started_at).total_seconds() * 1000)
-        await db.execute(
-            update(CampaignLog)
-            .where(CampaignLog.id == log.id)
-            .values(
-                completed_at=completed_at,
-                duration_ms=duration_ms,
-                status="FAILED",
-                error_message=str(exc),
+        # Non-fatal: fall back to empty filters so the pipeline fetches ALL contacts.
+        # This is preferable to blocking the entire pipeline on an Ollama parsing failure.
+        logger.error(f"[ClassificationAgent] Failed for campaign {campaign.id}: {exc} — falling back to empty filters")
+
+        fallback = {"filters": {"role": "", "location": "", "category": "", "company": ""}}
+        try:
+            await db.execute(
+                update(PipelineRun)
+                .where(PipelineRun.id == pipeline_run.id)
+                .values(
+                    classification_summary=fallback,
+                    state=PipelineState.CLASSIFIED,
+                )
             )
-        )
-        await db.commit()
-        logger.error(f"[ClassificationAgent] Failed for campaign {campaign.id}: {exc}")
-        raise
+            await db.execute(
+                update(Campaign)
+                .where(Campaign.id == campaign.id)
+                .values(pipeline_state=PipelineState.CLASSIFIED)
+            )
+            completed_at = datetime.utcnow()
+            duration_ms = int((completed_at - started_at).total_seconds() * 1000)
+            await db.execute(
+                update(CampaignLog)
+                .where(CampaignLog.id == log.id)
+                .values(
+                    completed_at=completed_at,
+                    duration_ms=duration_ms,
+                    status="FAILED",
+                    error_message=str(exc),
+                )
+            )
+            await db.commit()
+        except Exception as inner:
+            logger.critical(f"[ClassificationAgent] Could not persist fallback: {inner}")
+
+        return fallback

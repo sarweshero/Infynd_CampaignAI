@@ -21,6 +21,7 @@ class Contact(Base):
     linkedinclickrate = Column(Float, nullable=True)
     callanswerrate = Column(Float, nullable=True)
     preferredtime = Column(String(100), nullable=True)
+    phone_number = Column(String(50), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

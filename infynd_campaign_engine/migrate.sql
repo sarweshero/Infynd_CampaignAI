@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS contacts (
     linkedinclickrate FLOAT,
     callanswerrate    FLOAT,
     preferredtime     VARCHAR(100),
+    phone_number      VARCHAR(50),
     created_at        TIMESTAMP    NOT NULL DEFAULT NOW(),
     updated_at        TIMESTAMP    NOT NULL DEFAULT NOW()
 );

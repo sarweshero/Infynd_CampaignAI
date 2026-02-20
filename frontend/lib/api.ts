@@ -417,13 +417,17 @@ export type WsMessage = {
   campaign_id?:    string;
   total_contacts?: number;
   channel_counts?: Record<string, number>;
+  channels?:       string[];              // APPROVAL_START
   contact_email?:  string;
   channel?:        string;
   content?:        unknown;
-  count?:          number;   // from CHANNEL_GROUP_START
+  count?:          number;                // CHANNEL_GROUP_START
+  contact_count?:  number;                // CHANNEL_CONTENT
+  contacts?:       string[];              // CHANNEL_CONTENT — sample emails for this channel
   index?:          number;
   approved_count?: number;
   approved_by?:    string;
+  approved_channels?: string[];           // CAMPAIGN_APPROVED
 };
 
 export type WsAction =

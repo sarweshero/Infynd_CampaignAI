@@ -1066,9 +1066,10 @@ function DetailView({
 
   const genContent = (campaign.generated_content ?? {}) as Record<string, any>;
   const common: Record<string, any> = genContent.common ?? {};
-  const personalized: Record<string, any> = genContent.personalized ?? {};
-  const contacts = Object.keys(personalized).filter(
-    (email) => typeof email === "string" && email.includes("@") && email !== "common" && email !== "personalized"
+  // contacts is now a flat map { "email": "Channel" } stored under genContent.contacts
+  const contactsMap: Record<string, string> = genContent.contacts ?? {};
+  const contacts = Object.keys(contactsMap).filter(
+    (email) => typeof email === "string" && email.includes("@")
   );
 
   const [previewChannel, setPreviewChannel] = useState<string | null>(null);
@@ -1185,8 +1186,10 @@ function DetailView({
   }
 
   function startEditContact(email: string) {
-    const co = (personalized[email] as Record<string, any>)?.content ?? {};
-    setEditingContactFields(Object.fromEntries(Object.entries(co).map(([k, v]) => [k, String(v)])));
+    // With common-template model, editing contact = editing common template for their channel
+    const ch = contactsMap[email] ?? "Email";
+    const tpl = common[ch] ?? {};
+    setEditingContactFields(Object.fromEntries(Object.entries(tpl).map(([k, v]) => [k, String(v)])));
     setEditingContactEmail(email);
   }
 
@@ -1249,8 +1252,9 @@ function DetailView({
     const tpl = editingCommonChannel === channel ? editingCommonFields : (common[channel] ?? {});
     if (!tpl || Object.keys(tpl).length === 0)
       return <div className="text-slate-400 text-xs">No template</div>;
-    const email = Object.keys(personalized).find((e) => (personalized[e] as any)?.channel === channel);
-    const contact = email ? { email, ...(personalized[email] as any) } : {};
+    // Pick a sample contact for the preview substitution hint
+    const email = contacts.find((e) => (contactsMap[e]) === channel);
+    const contact = email ? { email, channel } : {};
     const renderField = (v: string) => substitutePlaceholders(v, contact, tpl as Record<string, any>);
 
     if (editingCommonChannel === channel) {
@@ -1474,71 +1478,43 @@ function DetailView({
         </div>
       )}
 
-      {/* Personalized contact content */}
+      {/* Contact list — channel assignment */}
       {contacts.length > 0 && (
         <div className="card overflow-hidden">
           <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
             <h3 className="font-semibold text-slate-800 text-sm">
-              Personalized Content ({contacts.length} contacts)
+              Contacts &amp; Channels ({contacts.length} total)
             </h3>
+            <span className="text-xs text-slate-400">Common templates will be personalised at send time</span>
           </div>
           <div className="divide-y divide-slate-50">
-            {contacts.slice(0, 10).map((email) => {
-              const ct = personalized[email] as Record<string, any> | undefined;
-              const ch = (ct?.channel as string) ?? "Email";
-              const co = ct?.content as Record<string, string> | undefined;
-              const isEditing = editingContactEmail === email;
+            {contacts.slice(0, 20).map((email) => {
+              const ch = contactsMap[email] ?? "Email";
+              const tpl = common[ch] ?? {};
+              // Show substituted preview of first content field
+              const previewKey = ch === "Email" ? "subject" : ch === "LinkedIn" ? "message" : "greeting";
+              const previewText = typeof tpl[previewKey] === "string"
+                ? substitutePlaceholders(tpl[previewKey], { email }, tpl as Record<string, any>)
+                : "";
               return (
-                <div key={email} className="px-5 py-4">
-                  <div className="flex items-center gap-2 mb-2 flex-wrap">
-                    <span className="text-sm font-medium text-slate-800">{email}</span>
-                    <span className="text-[11px] bg-blue-50 text-blue-700 border border-blue-100 px-2 py-0.5 rounded-full">
-                      {ch}
-                    </span>
-                    {!isEditing && ["CONTENT_GENERATED","AWAITING_APPROVAL"].includes(campaign.pipeline_state) && (
-                      <button onClick={() => startEditContact(email)} className="ml-auto btn-ghost text-xs px-3 py-1">
-                        ✎ Edit
-                      </button>
-                    )}
-                  </div>
-                  {isEditing ? (
-                    <div className="space-y-2">
-                      {Object.entries(editingContactFields).map(([k, v]) => (
-                        <div key={k}>
-                          <label className="text-[11px] text-slate-400 uppercase block mb-0.5">{k}</label>
-                          <textarea
-                            rows={k.toLowerCase().includes("body") || k.toLowerCase().includes("message") || k.toLowerCase().includes("script") ? 4 : 2}
-                            value={v}
-                            onChange={(e) => setEditingContactFields((p) => ({ ...p, [k]: e.target.value }))}
-                            className="input-premium text-xs resize-y"
-                          />
-                        </div>
-                      ))}
-                      <div className="flex gap-2 pt-1">
-                        <button
-                          onClick={saveContact}
-                          disabled={savingContact}
-                          className="btn-brand text-xs px-4 py-1.5 flex items-center gap-1.5"
-                        >
-                          {savingContact ? <><span className="btn-spinner" style={{ width: 12, height: 12 }} /> Saving…</> : "💾 Save"}
-                        </button>
-                        <button onClick={cancelEditContact} className="btn-ghost text-xs px-4 py-1.5">Cancel</button>
-                      </div>
-                    </div>
-                  ) : (
-                    co && (
-                      <div className="bg-slate-50 rounded-lg p-3 text-xs text-slate-600 space-y-1 border border-slate-100">
-                        {Object.entries(co).map(([k, v]) =>
-                          typeof v === "string" ? (
-                            <div key={k}><span className="text-slate-400 mr-1">{k}:</span>{substitutePlaceholders(v, { email, ...(personalized[email] as any) }, co as Record<string, any>)}</div>
-                          ) : null,
-                        )}
-                      </div>
-                    )
+                <div key={email} className="px-5 py-3 flex items-center gap-3 flex-wrap">
+                  <span className="text-sm font-medium text-slate-800 min-w-[200px]">{email}</span>
+                  <span className={`text-[11px] px-2 py-0.5 rounded-full border font-medium ${
+                    ch === "Email"    ? "bg-blue-50 text-blue-700 border-blue-100" :
+                    ch === "Call"     ? "bg-green-50 text-green-700 border-green-100" :
+                                        "bg-purple-50 text-purple-700 border-purple-100"
+                  }`}>
+                    {ch === "Call" ? "📞 Call" : ch === "LinkedIn" ? "💼 LinkedIn" : "✉️ Email"}
+                  </span>
+                  {previewText && (
+                    <span className="text-xs text-slate-400 truncate max-w-xs">{previewText}</span>
                   )}
                 </div>
               );
             })}
+            {contacts.length > 20 && (
+              <div className="px-5 py-3 text-xs text-slate-400">+{contacts.length - 20} more contacts</div>
+            )}
           </div>
         </div>
       )}
@@ -1713,13 +1689,19 @@ function ApprovalView({
   const [connected, setConnected] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [done, setDone] = useState(false);
-  const [currentContact, setCurrent] = useState<WsMessage | null>(null);
+
+  // Channel-based state
+  const [channels, setChannels] = useState<string[]>([]);
+  const [channelCounts, setChannelCounts] = useState<Record<string, number>>({});
+  const [totalContacts, setTotalContacts] = useState(0);
   const [currentChannel, setCurrentChannel] = useState<string>("");
+  const [currentContent, setCurrentContent] = useState<Record<string, string>>({});
+  const [currentContacts, setCurrentContacts] = useState<string[]>([]);
+  const [approvedChannels, setApprovedChannels] = useState<Set<string>>(new Set());
+  const [regeneratingChannel, setRegeneratingChannel] = useState<string>("");
+
   const [editFields, setEditFields] = useState<Record<string, string>>({});
   const [isEditing, setIsEditing] = useState(false);
-  const [totalContacts, setTotal] = useState(0);
-  const [approved, setApproved] = useState(0);
-  const [channelCounts, setChannelCounts] = useState<Record<string, number>>({});
   const [approvingAll, setApprovingAll] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -1749,29 +1731,51 @@ function ApprovalView({
         if (msg.type === "APPROVAL_START") {
           setConnected(true);
           setConnecting(false);
-          setTotal(msg.total_contacts ?? 0);
+          setTotalContacts(msg.total_contacts ?? 0);
           setChannelCounts(msg.channel_counts ?? {});
+          setChannels(msg.channels ?? []);
         }
         if (msg.type === "CHANNEL_GROUP_START") {
           setCurrentChannel(msg.channel ?? "");
+          setRegeneratingChannel("");
         }
-        if (msg.type === "CONTACT_CONTENT") {
-          setCurrent(msg);
-          setEditFields(contentToFields(msg.content));
+        if (msg.type === "CHANNEL_CONTENT") {
+          const fields = contentToFields(msg.content);
+          setCurrentContent(fields);
+          setEditFields(fields);
+          setCurrentContacts(msg.contacts ?? []);
+          setCurrentChannel(msg.channel ?? "");
           setIsEditing(false);
+          setRegeneratingChannel("");
         }
-        if (msg.type === "APPROVED" || msg.type === "ALL_APPROVED") {
-          setApproved((p) => msg.type === "ALL_APPROVED" ? (msg.approved_count ?? p) : p + 1);
+        if (msg.type === "CONTENT_UPDATED") {
+          // Template was saved — next CHANNEL_CONTENT will refresh display
+        }
+        if (msg.type === "CHANNEL_APPROVED") {
+          setApprovedChannels((prev) => new Set([...prev, msg.channel ?? ""]));
           setApprovingAll(false);
-          setCurrent(null);
-          setEditFields({});
+        }
+        if (msg.type === "ALL_APPROVED") {
+          setApprovedChannels((prev) => {
+            const next = new Set(prev);
+            channels.forEach((ch) => next.add(ch));
+            return next;
+          });
+          setApprovingAll(false);
         }
         if (msg.type === "CAMPAIGN_APPROVED") {
           setDone(true);
           toast("Campaign approved — messages are sending now!", "success");
           setTimeout(onDone, 2000);
         }
-        if (msg.error) {
+        if (msg.type === "REGENERATING") {
+          setRegeneratingChannel(msg.channel ?? "");
+        }
+        if (msg.type === "REGENERATE_FAILED") {
+          setRegeneratingChannel("");
+          toast(`Regeneration failed for ${msg.channel}: ${msg.error ?? "unknown error"}`, "error");
+        }
+        if (msg.error && !msg.type) {
           toast(msg.error, "error");
           setConnecting(false);
         }
@@ -1783,7 +1787,6 @@ function ApprovalView({
     );
     wsRef.current = ws;
     ws.onopen = () => {
-      // onopen may happen before we receive approval start
       setConnecting(false);
       setConnected(true);
     };
@@ -1791,7 +1794,7 @@ function ApprovalView({
       setConnecting(false);
       setConnected(false);
     };
-  }, [campaign.id]);
+  }, [campaign.id, channels]);
 
   // Auto-connect on mount
   useEffect(() => {
@@ -1804,7 +1807,7 @@ function ApprovalView({
       if (allowFallback) {
         restApprove();
       } else {
-        toast("WebSocket disconnected — please reconnect before editing or regenerating", "error");
+        toast("WebSocket disconnected — please reconnect", "error");
       }
       return;
     }
@@ -1813,9 +1816,9 @@ function ApprovalView({
 
   function sendApprove()    { send({ action: "approve" }, true); }
   function sendApproveAll() { setApprovingAll(true); send({ action: "approve_all" }, true); }
-  function sendRegenerate() { send({ action: "regenerate" }); }   // no fallback — WS required
+  function sendRegenerate() { send({ action: "regenerate" }); }
   function sendEdit()       {
-    send({ action: "edit", edited_content: editFields as Record<string, unknown> }); // no fallback
+    send({ action: "edit", edited_content: editFields as Record<string, unknown> });
     setIsEditing(false);
   }
 
@@ -1827,14 +1830,9 @@ function ApprovalView({
   }
 
   const CHANNEL_ICONS: Record<string, string> = { Email: "✉", LinkedIn: "🔗", Call: "☎" };
-  const EMAIL_FIELDS    = ["subject","body","cta"];
-  const LINKEDIN_FIELDS = ["message","cta"];
-  const CALL_FIELDS     = ["greeting","value_prop","objection_handler","closing","cta"];
-  function fieldsForChannel(ch: string) {
-    return ch === "Email" ? EMAIL_FIELDS : ch === "LinkedIn" ? LINKEDIN_FIELDS : CALL_FIELDS;
-  }
 
-  const progressPct = totalContacts > 0 ? pct(approved, totalContacts) : 0;
+  const progressPct = channels.length > 0 ? Math.round((approvedChannels.size / channels.length) * 100) : 0;
+  const hasContent = Object.keys(currentContent).length > 0;
 
   return (
     <div className="view-enter space-y-6 max-w-3xl">
@@ -1855,7 +1853,7 @@ function ApprovalView({
         {connected && !done && (
           <span className="flex items-center gap-2 text-xs text-emerald-600 font-medium">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            {totalContacts} contacts ready
+            {totalContacts} contacts · {channels.length} channels
           </span>
         )}
       </div>
@@ -1865,7 +1863,7 @@ function ApprovalView({
         <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-12 text-center">
           <div className="text-5xl mb-4">🎉</div>
           <div className="text-emerald-700 font-bold text-2xl font-display mb-2">Campaign Approved!</div>
-          <div className="text-slate-500 text-sm">Your campaign is being sent to all contacts now.</div>
+          <div className="text-slate-500 text-sm">Your campaign is being sent to all {totalContacts} contacts now.</div>
           <button onClick={onDone} className="mt-6 btn-brand px-8 py-3">
             Back to Dashboard
           </button>
@@ -1873,20 +1871,29 @@ function ApprovalView({
       ) : (
         <>
           {/* Channel summary pills */}
-          {Object.keys(channelCounts).length > 0 && (
+          {channels.length > 0 && (
             <div className="flex gap-3 flex-wrap">
-              {Object.entries(channelCounts).map(([ch, count]) => (
-                <div
-                  key={ch}
-                  className={`px-4 py-2 rounded-xl flex items-center gap-2 border transition-all ${
-                    currentChannel === ch ? "bg-blue-50 border-blue-200" : "bg-white border-slate-100"
-                  }`}
-                >
-                  <span className="text-base">{CHANNEL_ICONS[ch] ?? "📨"}</span>
-                  <span className="text-sm text-slate-700 font-medium">{ch}</span>
-                  <span className="text-xs text-slate-400">{count} contacts</span>
-                </div>
-              ))}
+              {channels.map((ch) => {
+                const isApproved = approvedChannels.has(ch);
+                const isCurrent = currentChannel === ch;
+                return (
+                  <div
+                    key={ch}
+                    className={`px-4 py-2 rounded-xl flex items-center gap-2 border transition-all ${
+                      isApproved
+                        ? "bg-emerald-50 border-emerald-200"
+                        : isCurrent
+                        ? "bg-blue-50 border-blue-200"
+                        : "bg-white border-slate-100"
+                    }`}
+                  >
+                    <span className="text-base">{CHANNEL_ICONS[ch] ?? "📨"}</span>
+                    <span className="text-sm text-slate-700 font-medium">{ch}</span>
+                    <span className="text-xs text-slate-400">{channelCounts[ch] ?? 0} contacts</span>
+                    {isApproved && <span className="text-xs text-emerald-600 font-semibold">✓</span>}
+                  </div>
+                );
+              })}
             </div>
           )}
 
@@ -1896,10 +1903,10 @@ function ApprovalView({
               <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div>
                   <div className="text-base font-semibold text-slate-800">
-                    Looks good? Send to all {totalContacts > 0 ? totalContacts : ""} contacts
+                    Looks good? Approve all {channels.length} channel templates
                   </div>
                   <div className="text-sm text-slate-500 mt-1 max-w-sm">
-                    AI has crafted personalized messages for each contact. Approve all at once, or scroll down to review one by one.
+                    AI has crafted one template per channel. Each template is sent to all contacts assigned to that channel, with placeholders filled in at send time.
                   </div>
                 </div>
                 <button
@@ -1909,15 +1916,15 @@ function ApprovalView({
                 >
                   {approvingAll ? (
                     <><span className="btn-spinner" /> Approving…</>
-                  ) : "✓ Approve All & Send"}
+                  ) : `✓ Approve All & Send (${totalContacts} contacts)`}
                 </button>
               </div>
 
-              {totalContacts > 0 && (
+              {channels.length > 0 && (
                 <div className="mt-5">
                   <div className="flex justify-between text-xs text-slate-400 mb-1.5">
-                    <span>Review progress</span>
-                    <span>{approved} / {totalContacts}</span>
+                    <span>Channel approval progress</span>
+                    <span>{approvedChannels.size} / {channels.length} channels</span>
                   </div>
                   <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                     <div
@@ -1930,20 +1937,17 @@ function ApprovalView({
             </div>
           )}
 
-          {/* Individual contact review card */}
-          {currentContact && (
+          {/* Channel template review card */}
+          {hasContent && currentChannel && (
             <div className="card p-6 border border-blue-100">
               <div className="flex items-center gap-3 mb-5">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white text-sm font-bold shrink-0">
-                  {(currentContact.contact_email ?? "?").charAt(0).toUpperCase()}
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white text-lg shrink-0">
+                  {CHANNEL_ICONS[currentChannel] ?? "📨"}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-slate-800 truncate">{currentContact.contact_email}</div>
+                  <div className="font-semibold text-slate-800">{currentChannel} Template</div>
                   <div className="text-xs text-slate-400 mt-0.5">
-                    {CHANNEL_ICONS[currentContact.channel ?? ""] ?? ""} {currentContact.channel}
-                    {totalContacts > 0 && (
-                      <span className="ml-2 text-blue-400"># {approved + 1} of {totalContacts}</span>
-                    )}
+                    Will be sent to {channelCounts[currentChannel] ?? 0} contacts
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1957,19 +1961,22 @@ function ApprovalView({
                   )}
                   <button
                     onClick={sendRegenerate}
+                    disabled={!!regeneratingChannel}
                     className="btn-ghost text-xs px-3 py-1.5"
                   >
-                    ↺ Regenerate
+                    {regeneratingChannel === currentChannel ? (
+                      <><span className="btn-spinner-blue" style={{ width: 12, height: 12 }} /> Regenerating…</>
+                    ) : "↺ Regenerate"}
                   </button>
                 </div>
               </div>
 
-              {/* Message preview or editor */}
+              {/* Template preview or editor */}
               {!isEditing ? (
                 <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 space-y-3 mb-5">
-                  {Object.entries(editFields).map(([k, v]) => (
+                  {Object.entries(currentContent).map(([k, v]) => (
                     <div key={k}>
-                      <div className="text-[11px] text-slate-400 uppercase tracking-wider mb-0.5 capitalize font-medium">
+                      <div className="text-[11px] text-slate-400 uppercase tracking-wider mb-0.5 font-medium">
                         {k.replace(/_/g, " ")}
                       </div>
                       <div className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{v}</div>
@@ -1978,15 +1985,15 @@ function ApprovalView({
                 </div>
               ) : (
                 <div className="space-y-3 mb-5">
-                  {fieldsForChannel(currentContact.channel ?? "Email").map((field) => (
+                  {Object.entries(editFields).map(([field, val]) => (
                     <div key={field}>
-                      <label className="block text-[11px] text-slate-400 uppercase tracking-wider mb-1 capitalize font-medium">
+                      <label className="block text-[11px] text-slate-400 uppercase tracking-wider mb-1 font-medium">
                         {field.replace(/_/g, " ")}
                       </label>
                       <textarea
-                        value={editFields[field] ?? ""}
+                        value={val}
                         onChange={(e) => setEditFields((prev) => ({ ...prev, [field]: e.target.value }))}
-                        rows={field === "body" || field === "message" || field === "value_prop" ? 5 : 2}
+                        rows={field === "body" || field === "message" || field === "value_proposition" ? 5 : 2}
                         className="input-premium text-sm resize-y"
                       />
                     </div>
@@ -1994,14 +2001,35 @@ function ApprovalView({
                 </div>
               )}
 
-              {/* Contact action row */}
+              {/* Sample contacts for this channel */}
+              {currentContacts.length > 0 && (
+                <div className="mb-5">
+                  <div className="text-[11px] text-slate-400 uppercase tracking-wider mb-2 font-medium">
+                    Recipients ({channelCounts[currentChannel] ?? currentContacts.length} contacts)
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {currentContacts.map((email) => (
+                      <span key={email} className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full">
+                        {email}
+                      </span>
+                    ))}
+                    {(channelCounts[currentChannel] ?? 0) > currentContacts.length && (
+                      <span className="text-xs text-slate-400 px-2 py-1">
+                        +{(channelCounts[currentChannel] ?? 0) - currentContacts.length} more
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Channel action row */}
               <div className="flex items-center gap-3">
                 {isEditing ? (
                   <>
                     <button onClick={sendEdit} className="btn-brand text-sm px-5 py-2.5 flex items-center gap-1.5">
-                      💾 Save &amp; Approve
+                      💾 Save Changes
                     </button>
-                    <button onClick={() => setIsEditing(false)} className="btn-ghost text-sm px-4 py-2.5">
+                    <button onClick={() => { setIsEditing(false); setEditFields(currentContent); }} className="btn-ghost text-sm px-4 py-2.5">
                       Cancel
                     </button>
                   </>
@@ -2010,7 +2038,7 @@ function ApprovalView({
                     onClick={sendApprove}
                     className="btn-success text-sm px-6 py-2.5 flex items-center gap-2"
                   >
-                    ✓ Approve &amp; Next
+                    ✓ Approve {currentChannel} Template
                   </button>
                 )}
               </div>
@@ -2041,12 +2069,12 @@ function ApprovalView({
             </div>
           )}
 
-          {connected && !currentContact && !approvingAll && (
+          {connected && !hasContent && !approvingAll && (
             <div className="card p-8 text-center">
               <div className="loader-wave mx-auto mb-4">
                 <span /><span /><span /><span /><span />
               </div>
-              <div className="text-slate-500 text-sm">Preparing content for review…</div>
+              <div className="text-slate-500 text-sm">Preparing channel templates for review…</div>
             </div>
           )}
         </>
