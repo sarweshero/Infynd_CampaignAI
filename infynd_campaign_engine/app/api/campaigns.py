@@ -549,16 +549,19 @@ async def send_preview(
 
     send_status = "SENT" if provider_message_id else "FAILED"
 
-    msg = OutboundMessage(
-        campaign_id=campaign_id,
-        contact_email=contact_email,
-        channel="Email",
-        message_payload=str(content),
-        send_status=send_status,
-        provider_message_id=provider_message_id,
-        sent_at=datetime.utcnow() if send_status == "SENT" else None,
-    )
-    db.add(msg)
+
+    # Prevent creation for invalid contact_email
+    if contact_email not in ("common", "personalized") and "@" in contact_email:
+        msg = OutboundMessage(
+            campaign_id=campaign_id,
+            contact_email=contact_email,
+            channel="Email",
+            message_payload=str(content),
+            send_status=send_status,
+            provider_message_id=provider_message_id,
+            sent_at=datetime.utcnow() if send_status == "SENT" else None,
+        )
+        db.add(msg)
 
     engage = EngagementHistory(
         campaign_id=campaign_id,

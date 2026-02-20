@@ -105,11 +105,7 @@ async def dispatch_campaign(db: AsyncSession, campaign_id: str) -> None:
     logger.info(f"[Dispatch] Campaign {campaign_id}: dispatching to {len(contact_emails)} contacts")
     dispatched_count = 0
 
-    allowed_emails = {"sarweshwardeivasihamani@gmail.com", "sarweshero@gmail.com"}
     for contact_email in contact_emails:
-        if contact_email not in allowed_emails:
-            logger.info(f"[Dispatch] Skipping {contact_email} (not in allowed list)")
-            continue
         channel = "Email"
         entry = personalized_map.get(contact_email)
         if isinstance(entry, dict) and entry.get("channel"):

@@ -1,4 +1,5 @@
 import logging
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -18,8 +19,13 @@ from app.api.tracking import router as tracking_router
 from app.api.websocket import router as ws_router
 from app.api.voice import router as voice_router
 
+
+# ─────────────────────────────────────────────────────────────
+# GLOBAL LOGGING CONFIGURATION
+# ─────────────────────────────────────────────────────────────
 configure_logging("DEBUG" if settings.DEBUG else "INFO")
-logger = logging.getLogger(__name__)
+
+logger = logging.getLogger("app")
 
 
 @asynccontextmanager
@@ -42,7 +48,41 @@ app = FastAPI(
 
 PREFIX = settings.API_V1_PREFIX
 
-# ─── CORS ─────────────────────────────────────────────────────────────────────
+
+# ─────────────────────────────────────────────────────────────
+# REQUEST LOGGING MIDDLEWARE (PRINTS EVERYTHING)
+# ─────────────────────────────────────────────────────────────
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start_time = time.time()
+
+    logger.info(
+        f"[REQUEST] {request.client.host} "
+        f"{request.method} {request.url.path}"
+    )
+
+    try:
+        response = await call_next(request)
+    except Exception as e:
+        logger.exception(
+            f"[EXCEPTION] {request.method} {request.url.path} -> {str(e)}"
+        )
+        raise
+
+    process_time = round((time.time() - start_time) * 1000, 2)
+
+    logger.info(
+        f"[RESPONSE] {request.method} {request.url.path} "
+        f"Status: {response.status_code} "
+        f"Time: {process_time}ms"
+    )
+
+    return response
+
+
+# ─────────────────────────────────────────────────────────────
+# CORS
+# ─────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -51,50 +91,67 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ─── Routers ──────────────────────────────────────────────────────────────────
-# Public routes (no auth required)
-app.include_router(auth_router, prefix=PREFIX)
-app.include_router(tracking_router, prefix=PREFIX)  # sendgrid webhook is public
 
-# Protected routes
+# ─────────────────────────────────────────────────────────────
+# ROUTERS
+# ─────────────────────────────────────────────────────────────
+app.include_router(auth_router, prefix=PREFIX)
+app.include_router(tracking_router, prefix=PREFIX)
 app.include_router(campaign_router, prefix=PREFIX)
 app.include_router(analytics_router, prefix=PREFIX)
-
-# WebSocket
 app.include_router(ws_router, prefix=PREFIX)
-
-# Voice (Twilio calling)
 app.include_router(voice_router, prefix=PREFIX)
 
 
-# ─── Global Exception Handlers ────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# EXCEPTION HANDLERS
+# ─────────────────────────────────────────────────────────────
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    errors = exc.errors()
+    logger.warning(
+        f"[VALIDATION_ERROR] {request.method} {request.url.path} "
+        f"{exc.errors()}"
+    )
     return JSONResponse(
         status_code=422,
         content={
             "detail": "Validation error",
             "code": "VALIDATION_ERROR",
-            "errors": errors,
+            "errors": exc.errors(),
         },
     )
 
 
 @app.exception_handler(Exception)
 async def generic_exception_handler(request: Request, exc: Exception):
-    logger.error(f"[UnhandledException] {request.url.path}: {exc}", exc_info=True)
+    logger.exception(
+        f"[UNHANDLED_EXCEPTION] {request.method} {request.url.path}"
+    )
     return JSONResponse(
         status_code=500,
         content={"detail": "Internal server error", "code": "INTERNAL_ERROR"},
     )
 
 
-# ─── Health Check ─────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────
+# HEALTH CHECK
+# ─────────────────────────────────────────────────────────────
 @app.get("/health", tags=["Health"])
 async def health():
+    logger.info("[HEALTH_CHECK] Service alive")
     return {"status": "ok", "service": settings.APP_NAME}
 
+
+# ─────────────────────────────────────────────────────────────
+# ENTRYPOINT
+# ─────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        log_level="debug",   # Forces terminal logs
+    )

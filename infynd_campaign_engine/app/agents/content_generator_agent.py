@@ -157,13 +157,18 @@ async def _call_ollama(prompt: str) -> Dict[str, Any]:
     if json_start == -1:
         raise ValueError(f"Ollama returned no JSON block: {raw[:200]}")
     json_str = raw[json_start:json_end]
-    # Remove ASCII control characters except for tab (\t), newline (\n), and carriage return (\r)
     import re
+    # Remove ASCII control characters except for tab (\t), newline (\n), and carriage return (\r)
     json_str = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', json_str)
+    # Remove trailing commas before } or ]
+    json_str = re.sub(r',\s*([}\]])', r'\1', json_str)
+    # Remove any lines that are not part of the JSON object
+    json_str = re.sub(r'^[^\{]*', '', json_str)
+    json_str = re.sub(r'[^\}]*$', '', json_str)
     try:
         return json.loads(json_str)
     except json.JSONDecodeError as e:
-        logger.error(f"[ContentGeneratorAgent] JSON decode error: {e}\nRaw: {json_str}\nFull Ollama: {raw}")
+        logger.error(f"[ContentGeneratorAgent] JSON decode error: {e}\nCleaned: {json_str}\nFull Ollama: {raw}")
         raise
 
 

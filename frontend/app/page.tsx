@@ -1067,7 +1067,9 @@ function DetailView({
   const genContent = (campaign.generated_content ?? {}) as Record<string, any>;
   const common: Record<string, any> = genContent.common ?? {};
   const personalized: Record<string, any> = genContent.personalized ?? {};
-  const contacts = Object.keys(personalized);
+  const contacts = Object.keys(personalized).filter(
+    (email) => typeof email === "string" && email.includes("@") && email !== "common" && email !== "personalized"
+  );
 
   const [previewChannel, setPreviewChannel] = useState<string | null>(null);
   const [approvedChannels, setApprovedChannels] = useState<Set<string>>(new Set());
