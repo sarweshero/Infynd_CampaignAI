@@ -198,10 +198,10 @@ async def run_content_generator_agent(
         contacts: List[Dict[str, Any]] = downstream.get("contacts", [])
         channel_map: Dict[str, str] = downstream.get("channel_map", {})
 
-        # ── Determine unique channels needed ─────────────────────────────
-        channels_needed: set = set(channel_map.values()) if channel_map else {"Email"}
-        if not channels_needed:
-            channels_needed = {"Email"}
+        # ── Always generate all 3 channel templates ─────────────────────
+        # Even if no contacts are currently assigned to a channel, the user
+        # should see all templates and can reassign contacts during approval.
+        channels_needed: set = {"Email", "LinkedIn", "Call"}
 
         # ── Step 1: Generate ONE common template per channel ─────────────
         # Templates use [CONTACT_NAME], [CONTACT_COMPANY] etc. as placeholders.
