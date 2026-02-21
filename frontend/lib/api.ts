@@ -214,7 +214,7 @@ export async function fetchCallTemplateVoices(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  ❶  AUTH  (endpoints 1–2)
+//  ❶  AUTH  (endpoints 1–3)
 // ─────────────────────────────────────────────────────────────────────────────
 export interface TokenResponse {
   access_token:  string;
@@ -223,6 +223,22 @@ export interface TokenResponse {
   role:          string;
   email:         string;
 }
+
+export interface RegisterResponse {
+  id:        string;
+  email:     string;
+  full_name: string | null;
+  role:      string;
+  message:   string;
+}
+
+/** POST /auth/register */
+export const authRegister = (email: string, password: string, full_name?: string) =>
+  apiFetch<RegisterResponse>("/auth/register", {
+    method: "POST",
+    body: { email, password, full_name: full_name || null },
+    auth: false,
+  });
 
 /** POST /auth/login */
 export const authLogin = (email: string, password: string) =>
@@ -238,6 +254,29 @@ export const authRefresh = (refresh_token: string) =>
     method: "POST",
     body: { refresh_token },
     auth: false,
+  });
+
+export interface ProfileResponse {
+  id:        string;
+  email:     string;
+  full_name: string | null;
+  role:      string;
+  is_active: boolean;
+}
+
+/** GET /auth/me */
+export const getProfile = () =>
+  apiFetch<ProfileResponse>("/auth/me");
+
+/** PATCH /auth/profile */
+export const updateProfile = (data: { full_name?: string; email?: string }) =>
+  apiFetch<ProfileResponse>("/auth/profile", { method: "PATCH", body: data });
+
+/** PATCH /auth/password */
+export const changePassword = (current_password: string, new_password: string) =>
+  apiFetch<{ message: string }>("/auth/password", {
+    method: "PATCH",
+    body: { current_password, new_password },
   });
 
 // ─────────────────────────────────────────────────────────────────────────────

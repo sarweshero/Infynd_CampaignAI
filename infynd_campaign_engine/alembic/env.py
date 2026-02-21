@@ -16,6 +16,7 @@ import app.models.contact   # noqa
 import app.models.pipeline  # noqa
 import app.models.tracking  # noqa
 import app.models.voice     # noqa
+import app.models.user      # noqa
 
 config = context.config
 if config.config_file_name is not None:

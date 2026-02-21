@@ -9,7 +9,11 @@ import React, {
 } from "react";
 import {
   authLogin,
+  authRegister,
   authRefresh,
+  getProfile,
+  updateProfile,
+  changePassword,
   createCampaign,
   listCampaigns,
   getCampaignCount,
@@ -38,6 +42,7 @@ import {
   type WsAction,
   type LogEntry,
   type MessageEntry,
+  type ProfileResponse,
 } from "@/lib/api";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -256,13 +261,16 @@ function Sidebar({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Login View
+//  Login / Register View
 // ─────────────────────────────────────────────────────────────────────────────
 function LoginView({ onSuccess }: { onSuccess: (email: string, role: string) => void }) {
-  const [email, setEmail] = useState("admin@infynd.com");
-  const [password, setPassword] = useState("admin123");
+  const [mode, setMode] = useState<"login" | "register">("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [fullName, setFullName] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -273,6 +281,42 @@ function LoginView({ onSuccess }: { onSuccess: (email: string, role: string) => 
     if (error || !data) { setErr(error ?? "Login failed"); return; }
     setTokens(data.access_token, data.refresh_token);
     onSuccess(data.email, data.role);
+  }
+
+  async function handleRegister(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setErr("");
+    setSuccessMsg("");
+
+    if (password.length < 6) {
+      setErr("Password must be at least 6 characters");
+      setLoading(false);
+      return;
+    }
+
+    const { data, error } = await authRegister(email, password, fullName || undefined);
+    setLoading(false);
+    if (error || !data) { setErr(error ?? "Registration failed"); return; }
+
+    setSuccessMsg("Account created! Signing you in…");
+
+    // Auto-login after successful registration
+    const { data: loginData, error: loginErr } = await authLogin(email, password);
+    if (loginErr || !loginData) {
+      setSuccessMsg("");
+      setErr("Account created but auto-login failed. Please sign in manually.");
+      setMode("login");
+      return;
+    }
+    setTokens(loginData.access_token, loginData.refresh_token);
+    onSuccess(loginData.email, loginData.role);
+  }
+
+  function switchMode() {
+    setMode(mode === "login" ? "register" : "login");
+    setErr("");
+    setSuccessMsg("");
   }
 
   return (
@@ -308,7 +352,9 @@ function LoginView({ onSuccess }: { onSuccess: (email: string, role: string) => 
             <span className="text-gradient-brand">Campaign Engine</span>
           </h1>
           <p className="text-slate-500 mt-2 text-sm font-light">
-            AI-powered multi-agent outbound campaign platform
+            {mode === "login"
+              ? "Sign in to your account"
+              : "Create a new account"}
           </p>
           <div className="flex items-center justify-center gap-2 mt-3">
             {["Global Reach", "Multi-Agent AI", "Real-time Analytics"].map((tag) => (
@@ -327,6 +373,48 @@ function LoginView({ onSuccess }: { onSuccess: (email: string, role: string) => 
           className="card p-8 space-y-6 animate-fade-in-up"
           style={{ animationDelay: "0.15s" }}
         >
+          {/* Mode toggle tabs */}
+          <div className="flex rounded-xl bg-slate-100 p-1">
+            <button
+              type="button"
+              onClick={() => { setMode("login"); setErr(""); setSuccessMsg(""); }}
+              className={`flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all ${
+                mode === "login"
+                  ? "bg-white text-slate-900 shadow-sm"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              Sign In
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMode("register"); setErr(""); setSuccessMsg(""); }}
+              className={`flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all ${
+                mode === "register"
+                  ? "bg-white text-slate-900 shadow-sm"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              Register
+            </button>
+          </div>
+
+          {/* Registration: Full Name */}
+          {mode === "register" && (
+            <div>
+              <label className="block text-sm text-slate-700 mb-2 font-semibold">
+                Full Name
+              </label>
+              <input
+                type="text"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                className="input-premium"
+                placeholder="John Doe"
+              />
+            </div>
+          )}
+
           <div>
             <label className="block text-sm text-slate-700 mb-2 font-semibold">
               Email Address
@@ -352,6 +440,9 @@ function LoginView({ onSuccess }: { onSuccess: (email: string, role: string) => 
               placeholder="••••••••"
               required
             />
+            {mode === "register" && (
+              <p className="text-xs text-slate-400 mt-1">Minimum 6 characters</p>
+            )}
           </div>
 
           {err && (
@@ -363,29 +454,88 @@ function LoginView({ onSuccess }: { onSuccess: (email: string, role: string) => 
             </div>
           )}
 
+          {successMsg && (
+            <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl px-4 py-3 text-sm flex items-center gap-2">
+              <span className="w-5 h-5 rounded-full bg-emerald-100 flex items-center justify-center text-xs text-emerald-600 shrink-0">
+                ✓
+              </span>
+              {successMsg}
+            </div>
+          )}
+
           <button
             type="button"
-            onClick={handleLogin}
+            onClick={mode === "login" ? handleLogin : handleRegister}
             disabled={loading}
             className="btn-brand w-full py-3.5 text-sm rounded-xl font-semibold"
           >
             {loading ? (
               <span className="flex items-center justify-center gap-3">
                 <span className="btn-spinner" />
-                Signing in…
+                {mode === "login" ? "Signing in…" : "Creating account…"}
               </span>
-            ) : (
+            ) : mode === "login" ? (
               "Sign in to InFynd →"
+            ) : (
+              "Create Account →"
             )}
           </button>
 
           <p className="text-center text-xs text-slate-400">
-            Domain{" "}
-            <span className="text-blue-500 font-medium">@infynd.com</span> → ADMIN
-            &nbsp;|&nbsp; other → VIEWER
+            {mode === "login" ? (
+              <>
+                Don&apos;t have an account?{" "}
+                <button type="button" onClick={switchMode} className="text-blue-500 font-medium hover:underline">
+                  Register
+                </button>
+              </>
+            ) : (
+              <>
+                Already have an account?{" "}
+                <button type="button" onClick={switchMode} className="text-blue-500 font-medium hover:underline">
+                  Sign in
+                </button>
+              </>
+            )}
           </p>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Expandable Textarea  (collapsed by default, ^ to expand)
+// ─────────────────────────────────────────────────────────────────────────────
+function ExpandableTextarea({
+  value,
+  onChange,
+  className = "",
+  expandedRows = 5,
+}: {
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+  className?: string;
+  expandedRows?: number;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="relative">
+      <textarea
+        value={value}
+        onChange={onChange}
+        rows={expanded ? expandedRows : 1}
+        className={`${className} resize-none pr-8`}
+      />
+      <button
+        type="button"
+        onClick={() => setExpanded((p) => !p)}
+        title={expanded ? "Collapse" : "Expand"}
+        className="absolute right-2 top-2 w-5 h-5 flex items-center justify-center rounded text-slate-400 hover:text-blue-500 hover:bg-slate-100 transition-all select-none"
+        style={{ transform: expanded ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+      </button>
     </div>
   );
 }
@@ -809,7 +959,7 @@ function CreateView({
   const [productLink, setProductLink] = useState("");
   const [autoApprove, setAutoApprove] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [showOptions, setShowOptions] = useState(false);
+  const [showOptions, setShowOptions] = useState(true);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Auto-resize textarea
@@ -925,10 +1075,9 @@ function CreateView({
               onClick={() => setShowOptions((v) => !v)}
               className={`create-action-btn ${showOptions ? "create-action-btn-active" : ""}`}
               title="Campaign options"
+              style={{ transition: "transform 0.2s", transform: showOptions ? "rotate(180deg)" : "rotate(0deg)" }}
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/>
-              </svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
             </button>
 
             <textarea
@@ -1250,11 +1399,11 @@ function DetailView({
           {Object.entries(editingCommonFields).map(([k, v]) => (
             <div key={k}>
               <label className="text-[11px] text-slate-400 uppercase block mb-0.5">{k}</label>
-              <textarea
-                rows={k.toLowerCase().includes("body") || k.toLowerCase().includes("message") ? 5 : 2}
+              <ExpandableTextarea
                 value={v}
                 onChange={(e) => setEditingCommonFields((p) => ({ ...p, [k]: e.target.value }))}
-                className="input-premium text-xs resize-y"
+                className="input-premium text-xs w-full"
+                expandedRows={k.toLowerCase().includes("body") || k.toLowerCase().includes("message") ? 5 : 3}
               />
             </div>
           ))}
@@ -1977,11 +2126,11 @@ function ApprovalView({
                       <label className="block text-[11px] text-slate-400 uppercase tracking-wider mb-1 font-medium">
                         {field.replace(/_/g, " ")}
                       </label>
-                      <textarea
+                      <ExpandableTextarea
                         value={val}
                         onChange={(e) => setEditFields((prev) => ({ ...prev, [field]: e.target.value }))}
-                        rows={field === "body" || field === "message" || field === "value_proposition" ? 5 : 2}
-                        className="input-premium text-sm resize-y"
+                        className="input-premium text-sm w-full"
+                        expandedRows={field === "body" || field === "message" || field === "value_proposition" ? 6 : 3}
                       />
                     </div>
                   ))}
@@ -2571,28 +2720,82 @@ function SettingsView({
   role,
   onLogout,
   toast,
+  onProfileUpdate,
 }: {
   userEmail: string;
   role: string;
   onLogout: () => void;
   toast: (msg: string, kind?: Toast["kind"]) => void;
+  onProfileUpdate: (email: string, role: string, fullName: string) => void;
 }) {
+  const [tab, setTab] = useState<"profile" | "security">("profile");
+
+  // Profile fields
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState(userEmail);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileFetched, setProfileFetched] = useState(false);
+
+  // Password fields
+  const [currentPw, setCurrentPw] = useState("");
+  const [newPw, setNewPw] = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
+  const [pwLoading, setPwLoading]   = useState(false);
+
+  // Fetch profile on mount
+  useEffect(() => {
+    if (profileFetched) return;
+    setProfileFetched(true);
+    getProfile().then(({ data }) => {
+      if (data) {
+        setFullName(data.full_name ?? "");
+        setEmail(data.email);
+      }
+    });
+  }, [profileFetched]);
+
+  async function handleSaveProfile(e: React.FormEvent) {
+    e.preventDefault();
+    setProfileLoading(true);
+    const { data, error } = await updateProfile({
+      full_name: fullName || undefined,
+      email: email !== userEmail ? email : undefined,
+    });
+    setProfileLoading(false);
+    if (error || !data) { toast(error ?? "Failed to save profile", "error"); return; }
+    toast("Profile updated", "success");
+    onProfileUpdate(data.email, data.role, data.full_name ?? "");
+  }
+
+  async function handleChangePassword(e: React.FormEvent) {
+    e.preventDefault();
+    if (newPw !== confirmPw) { toast("New passwords do not match", "error"); return; }
+    if (newPw.length < 6)    { toast("Password must be at least 6 characters", "error"); return; }
+    setPwLoading(true);
+    const { error } = await changePassword(currentPw, newPw);
+    setPwLoading(false);
+    if (error) { toast(error, "error"); return; }
+    toast("Password changed successfully", "success");
+    setCurrentPw(""); setNewPw(""); setConfirmPw("");
+  }
+
   return (
     <div className="view-enter space-y-6 max-w-lg">
       <div>
-        <h2 className="text-xl font-bold text-slate-900 font-display">Account</h2>
-        <p className="text-slate-500 text-sm">Your profile and preferences</p>
+        <h2 className="text-xl font-bold text-slate-900 font-display">Settings</h2>
+        <p className="text-slate-500 text-sm">Manage your profile and security</p>
       </div>
 
-      <div className="card p-6 space-y-5">
-        {/* Avatar + name */}
+      {/* Avatar banner */}
+      <div className="card p-6">
         <div className="flex items-center gap-4">
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white text-xl font-bold uppercase shadow-glow">
-            {userEmail.charAt(0)}
+            {(fullName || email).charAt(0)}
           </div>
           <div>
-            <div className="text-base font-semibold text-slate-800">{userEmail}</div>
-            <div className={`inline-flex mt-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+            <div className="text-base font-semibold text-slate-800">{fullName || email}</div>
+            <div className="text-xs text-slate-400 mt-0.5">{email}</div>
+            <div className={`inline-flex mt-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
               role === "ADMIN"
                 ? "bg-blue-100 text-blue-700 border border-blue-200"
                 : "bg-slate-100 text-slate-600 border border-slate-200"
@@ -2601,18 +2804,108 @@ function SettingsView({
             </div>
           </div>
         </div>
+      </div>
 
-        <div className="border-t border-slate-100 pt-4 space-y-3">
-          <div className="flex items-center justify-between py-2 px-3 bg-slate-50 rounded-xl">
-            <span className="text-sm text-slate-600">Auto-approve future campaigns</span>
-            <span className="text-xs text-slate-400">Set per campaign</span>
-          </div>
-          <div className="flex items-center justify-between py-2 px-3 bg-slate-50 rounded-xl">
-            <span className="text-sm text-slate-600">Campaign notifications</span>
-            <span className="text-xs text-emerald-600 font-medium">On</span>
-          </div>
-        </div>
+      {/* Tabs */}
+      <div className="flex rounded-xl bg-slate-100 p-1">
+        {(["profile", "security"] as const).map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setTab(t)}
+            className={`flex-1 py-2.5 text-sm font-semibold rounded-lg capitalize transition-all ${
+              tab === t ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            {t === "profile" ? "Profile" : "Security"}
+          </button>
+        ))}
+      </div>
 
+      {tab === "profile" && (
+        <form className="card p-6 space-y-5" onSubmit={handleSaveProfile}>
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">Full Name</label>
+            <input
+              type="text"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              className="input-premium"
+              placeholder="John Doe"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">Email Address</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="input-premium"
+              required
+            />
+            <p className="text-xs text-slate-400 mt-1.5">
+              Changing to an <span className="text-blue-500 font-medium">@infynd.com</span> address upgrades your role to Admin.
+            </p>
+          </div>
+          <button
+            type="submit"
+            disabled={profileLoading}
+            className="btn-brand text-sm px-6 py-2.5 flex items-center gap-2"
+          >
+            {profileLoading ? <><span className="btn-spinner" /> Saving…</> : "💾 Save Profile"}
+          </button>
+        </form>
+      )}
+
+      {tab === "security" && (
+        <form className="card p-6 space-y-5" onSubmit={handleChangePassword}>
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">Current Password</label>
+            <input
+              type="password"
+              value={currentPw}
+              onChange={(e) => setCurrentPw(e.target.value)}
+              className="input-premium"
+              placeholder="••••••••"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">New Password</label>
+            <input
+              type="password"
+              value={newPw}
+              onChange={(e) => setNewPw(e.target.value)}
+              className="input-premium"
+              placeholder="••••••••"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">Confirm New Password</label>
+            <input
+              type="password"
+              value={confirmPw}
+              onChange={(e) => setConfirmPw(e.target.value)}
+              className="input-premium"
+              placeholder="••••••••"
+              required
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={pwLoading}
+            className="btn-brand text-sm px-6 py-2.5 flex items-center gap-2"
+          >
+            {pwLoading ? <><span className="btn-spinner" /> Updating…</> : "🔑 Change Password"}
+          </button>
+        </form>
+      )}
+
+      {/* Sign out */}
+      <div className="card p-6">
+        <h3 className="text-sm font-semibold text-slate-800 mb-1">Session</h3>
+        <p className="text-xs text-slate-500 mb-4">Sign out of InFynd on this device.</p>
         <button
           onClick={onLogout}
           className="btn-danger text-sm px-5 py-2.5 flex items-center gap-2"
@@ -2685,6 +2978,11 @@ export default function App() {
     setView("create"); // ← redirect to create campaign after login
     refreshCampaigns();
     toast(`Welcome, ${email}!`, "success");
+  }
+
+  function handleProfileUpdate(email: string, r: string, _fullName: string) {
+    setUserEmail(email);
+    setRole(r);
   }
 
   function handleLogout() {
@@ -2833,6 +3131,7 @@ export default function App() {
             role={role}
             onLogout={handleLogout}
             toast={toast}
+            onProfileUpdate={handleProfileUpdate}
           />
         );
       default:
