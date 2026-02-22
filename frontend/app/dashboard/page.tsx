@@ -161,12 +161,12 @@ function Toasts({ toasts, remove }: { toasts: Toast[]; remove: (id: number) => v
 // ─────────────────────────────────────────────────────────────────────────────
 //  Sidebar
 // ─────────────────────────────────────────────────────────────────────────────
-const NAV = [
-  { id: "create",    label: "New Campaign", icon: "✦" },
-  { id: "dashboard", label: "Dashboard",    icon: "⊞" },
-  { id: "history",   label: "History",      icon: "▤" },
-  { id: "tracking",  label: "Tracking",     icon: "◎" },
-  { id: "settings",  label: "Settings",     icon: "⚙" },
+const NAV: { id: string; label: string; icon: React.ReactNode }[] = [
+  { id: "create", label: "New Campaign", icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg> },
+  { id: "dashboard", label: "Dashboard", icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg> },
+  { id: "history", label: "History", icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> },
+  { id: "tracking", label: "Tracking", icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg> },
+  { id: "settings", label: "Settings", icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" x2="4" y1="21" y2="14"/><line x1="4" x2="4" y1="10" y2="3"/><line x1="12" x2="12" y1="21" y2="12"/><line x1="12" x2="12" y1="8" y2="3"/><line x1="20" x2="20" y1="21" y2="16"/><line x1="20" x2="20" y1="12" y2="3"/><line x1="2" x2="6" y1="14" y2="14"/><line x1="10" x2="14" y1="8" y2="8"/><line x1="18" x2="22" y1="16" y2="16"/></svg> },
 ];
 
 function Sidebar({
@@ -183,46 +183,38 @@ function Sidebar({
   onLogout: () => void;
 }) {
   return (
-    <aside className="flex flex-col w-64 min-h-screen bg-white border-r border-slate-100 py-6 relative shadow-[2px_0_16px_rgba(15,23,42,0.04)]">
-      {/* Subtle top gradient accent */}
-      <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 via-blue-400 to-indigo-500 rounded-none" />
-
+    <aside className="flex flex-col w-[260px] h-screen overflow-y-auto shrink-0 sticky top-0 bg-[#0f172a] py-5 relative">
       {/* Logo */}
-      <div className="px-6 mb-8">
+      <div className="px-5 mb-8">
         <div className="flex items-center gap-3">
-          <div className="relative w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold text-sm shadow-glow">
+          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold text-xs">
             <span className="font-display tracking-tight">In</span>
-            <div className="absolute inset-0 rounded-xl bg-blue-500 opacity-20 blur-xl scale-150 -z-10" />
           </div>
           <div>
-            <div className="text-slate-900 font-bold text-base leading-tight font-display tracking-tight">InFynd</div>
-            <div className="text-blue-400 text-[10px] font-semibold tracking-widest uppercase">Campaign Engine</div>
+            <div className="text-white font-bold text-[15px] leading-tight font-display tracking-tight">InFynd</div>
+            <div className="text-blue-400 text-[10px] font-medium tracking-widest uppercase">Campaign Engine</div>
           </div>
         </div>
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-3 space-y-1">
+      <nav className="flex-1 px-3 space-y-0.5">
         {NAV.map((item) => (
           <button
             key={item.id}
             onClick={() => setView(item.id as View)}
-            className={`sidebar-item w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm transition-all duration-200 ${
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] transition-all duration-150 ${
               view === item.id
-                ? "active bg-blue-50 text-blue-700 font-semibold border border-blue-100"
-                : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+                ? "bg-white/[0.08] text-white font-medium"
+                : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]"
             }`}
           >
-            <span
-              className={`text-base w-5 text-center transition-all duration-200 ${
-                view === item.id ? "scale-110 text-blue-600" : ""
-              }`}
-            >
+            <span className={`w-[18px] h-[18px] flex-shrink-0 ${view === item.id ? "text-blue-400" : ""}`}>
               {item.icon}
             </span>
             {item.label}
             {item.id === "create" && (
-              <span className="ml-auto text-[10px] bg-blue-500 text-white px-1.5 py-0.5 rounded-full font-bold">
+              <span className="ml-auto text-[9px] bg-blue-600 text-white px-1.5 py-0.5 rounded font-bold tracking-wide">
                 AI
               </span>
             )}
@@ -230,19 +222,22 @@ function Sidebar({
         ))}
       </nav>
 
+      {/* Divider */}
+      <div className="mx-4 border-t border-white/[0.06]" />
+
       {/* User */}
-      <div className="px-4 mt-4 pt-4 border-t border-slate-100">
+      <div className="px-4 pt-4 pb-2">
         <div className="flex items-center gap-3 mb-3">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white text-xs font-bold uppercase shadow-glow-sm">
+          <div className="w-8 h-8 rounded-md bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold uppercase">
             {userEmail.charAt(0)}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-xs text-slate-600 truncate font-medium">{userEmail}</div>
+            <div className="text-xs text-slate-300 truncate font-medium">{userEmail}</div>
             <div
-              className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold mt-0.5 ${
+              className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium mt-0.5 ${
                 role === "ADMIN"
-                  ? "bg-blue-100 text-blue-700 border border-blue-200"
-                  : "bg-slate-100 text-slate-500 border border-slate-200"
+                  ? "bg-blue-500/20 text-blue-300"
+                  : "bg-white/[0.05] text-slate-500"
               }`}
             >
               {role}
@@ -251,9 +246,10 @@ function Sidebar({
         </div>
         <button
           onClick={onLogout}
-          className="w-full flex items-center gap-2 text-xs text-slate-400 hover:text-red-500 transition-all duration-200 px-1 py-1 rounded-lg hover:bg-red-50"
+          className="w-full flex items-center gap-2 text-xs text-slate-500 hover:text-red-400 transition-all px-1 py-1.5 rounded-md hover:bg-white/[0.04]"
         >
-          <span className="text-sm">←</span> Sign out
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          Sign out
         </button>
       </div>
     </aside>
@@ -320,58 +316,31 @@ function LoginView({ onSuccess }: { onSuccess: (email: string, role: string) => 
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#f0f6ff] via-[#e8f2ff] to-[#f0f0ff] flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Animated mesh orbs */}
-      <div className="login-mesh">
-        <div
-          className="login-orb w-[500px] h-[500px] bg-blue-400/25 animate-pulse-soft"
-          style={{ top: "-10%", left: "-5%", animationDelay: "0s" }}
-        />
-        <div
-          className="login-orb w-[400px] h-[400px] bg-indigo-400/20 animate-float"
-          style={{ bottom: "5%", right: "-5%", animationDelay: "1s" }}
-        />
-        <div
-          className="login-orb w-[300px] h-[300px] bg-blue-300/15 animate-pulse-soft"
-          style={{ top: "50%", left: "45%", animationDelay: "2s" }}
-        />
-      </div>
-
-      {/* Wireframe background grid */}
-      <div className="absolute inset-0 wireframe-bg opacity-50" />
+    <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-4 relative overflow-hidden">
+      {/* Subtle gradient background */}
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-50/50 via-transparent to-indigo-50/30" />
 
       <div className="w-full max-w-md relative z-10">
         {/* Logo & heading */}
-        <div className="text-center mb-10 animate-fade-in-up">
-          <div className="relative inline-flex w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 items-center justify-center text-white text-2xl font-bold mb-5 shadow-glow-lg">
+        <div className="text-center mb-8 animate-fade-in-up">
+          <div className="inline-flex w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 items-center justify-center text-white text-lg font-bold mb-4">
             <span className="font-display">In</span>
-            <div className="absolute inset-0 rounded-2xl bg-blue-500 opacity-25 blur-2xl scale-150 -z-10" />
           </div>
-          <h1 className="text-3xl font-bold text-slate-900 tracking-tight font-display">
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight font-display">
             InFynd{" "}
-            <span className="text-gradient-brand">Campaign Engine</span>
+            <span className="text-blue-600">Campaign Engine</span>
           </h1>
-          <p className="text-slate-500 mt-2 text-sm font-light">
+          <p className="text-slate-400 mt-1.5 text-sm">
             {mode === "login"
               ? "Sign in to your account"
               : "Create a new account"}
           </p>
-          <div className="flex items-center justify-center gap-2 mt-3">
-            {["Global Reach", "Multi-Agent AI", "Real-time Analytics"].map((tag) => (
-              <span
-                key={tag}
-                className="text-[10px] font-semibold px-2.5 py-1 rounded-full bg-blue-50 text-blue-600 border border-blue-100"
-              >
-                {tag}
-              </span>
-            ))}
-          </div>
         </div>
 
         {/* Card */}
         <div
-          className="card p-8 space-y-6 animate-fade-in-up"
-          style={{ animationDelay: "0.15s" }}
+          className="bg-white border border-slate-200 rounded-xl p-7 space-y-5 shadow-sm animate-fade-in-up"
+          style={{ animationDelay: "0.1s" }}
         >
           {/* Mode toggle tabs */}
           <div className="flex rounded-xl bg-slate-100 p-1">
@@ -555,19 +524,19 @@ function Metric({
   accent?: string;
 }) {
   return (
-    <div className="card p-5 hover-lift">
-      <div className="text-slate-400 text-[10px] uppercase tracking-widest font-semibold mb-2">
+    <div className="bg-white border border-slate-200 rounded-lg p-4">
+      <div className="text-slate-400 text-[11px] uppercase tracking-wider font-medium mb-1.5">
         {label}
       </div>
       <div
-        className={`text-3xl font-bold tracking-tight font-display count-enter ${
+        className={`text-2xl font-bold tracking-tight font-display ${
           accent ?? "text-slate-900"
         }`}
       >
         {value}
       </div>
       {sub && (
-        <div className="text-blue-500 text-xs mt-1.5 font-medium">{sub}</div>
+        <div className="text-blue-500 text-xs mt-1 font-medium">{sub}</div>
       )}
     </div>
   );
@@ -587,6 +556,24 @@ const CHART_BG: Record<string, string> = {
   DISPATCHED:           "bg-blue-600",
   COMPLETED:            "bg-emerald-500",
   FAILED:               "bg-red-500",
+};
+
+const CHART_HEX: Record<string, string> = {
+  CREATED:              "#94a3b8",
+  CLASSIFIED:           "#0ea5e9",
+  CONTACTS_RETRIEVED:   "#06b6d4",
+  CHANNEL_DECIDED:      "#3b82f6",
+  CONTENT_GENERATED:    "#8b5cf6",
+  AWAITING_APPROVAL:    "#f59e0b",
+  APPROVED:             "#22c55e",
+  DISPATCHED:           "#2563eb",
+  COMPLETED:            "#10b981",
+  FAILED:               "#ef4444",
+  // platforms
+  email:                "#0ea5e9",
+  linkedin:             "#2563eb",
+  call:                 "#8b5cf6",
+  sms:                  "#14b8a6",
 };
 
 const PLATFORM_BG: Record<string, string> = {
@@ -684,6 +671,221 @@ function MiniVBar({ items, maxVal }: { items: { label: string; value: number; bg
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+//  DonutChart — pure SVG pie/donut with legend
+// ─────────────────────────────────────────────────────────────────────────────
+function DonutChart({
+  segments,
+  centerLabel,
+  centerSub,
+}: {
+  segments: { value: number; hex: string; label: string }[];
+  centerLabel: string;
+  centerSub?: string;
+}) {
+  const total = segments.reduce((s, x) => s + x.value, 0);
+  if (total === 0)
+    return <p className="text-slate-300 text-xs py-10 text-center">No data yet</p>;
+
+  const cx = 70; const cy = 70;
+  const R = 54;  const r = 34;
+  let angle = -Math.PI / 2;
+
+  const paths = segments
+    .filter((s) => s.value > 0)
+    .map(({ value, hex }) => {
+      const sweep = (value / total) * 2 * Math.PI;
+      const x1 = cx + R * Math.cos(angle);
+      const y1 = cy + R * Math.sin(angle);
+      const x2 = cx + R * Math.cos(angle + sweep);
+      const y2 = cy + R * Math.sin(angle + sweep);
+      const ix1 = cx + r * Math.cos(angle);
+      const iy1 = cy + r * Math.sin(angle);
+      const ix2 = cx + r * Math.cos(angle + sweep);
+      const iy2 = cy + r * Math.sin(angle + sweep);
+      const large = sweep > Math.PI ? 1 : 0;
+      const d = `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${R} ${R} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} L ${ix2.toFixed(2)} ${iy2.toFixed(2)} A ${r} ${r} 0 ${large} 0 ${ix1.toFixed(2)} ${iy1.toFixed(2)} Z`;
+      angle += sweep;
+      return { d, hex };
+    });
+
+  return (
+    <div className="flex items-center gap-5">
+      <svg
+        width="140" height="140"
+        viewBox="0 0 140 140"
+        className="flex-shrink-0"
+      >
+        {paths.map((p, i) => (
+          <path
+            key={i}
+            d={p.d}
+            fill={p.hex}
+            className="hover:opacity-80 transition-opacity cursor-pointer"
+          />
+        ))}
+        {/* center hole */}
+        <circle cx={cx} cy={cy} r={r - 2} fill="white" />
+        <text
+          x={cx} y={cy - 5}
+          textAnchor="middle"
+          style={{ fontSize: 22, fontWeight: 800, fill: "#0f172a" }}
+        >
+          {centerLabel}
+        </text>
+        <text
+          x={cx} y={cy + 11}
+          textAnchor="middle"
+          style={{ fontSize: 10, fill: "#94a3b8" }}
+        >
+          {centerSub ?? "total"}
+        </text>
+      </svg>
+
+      <div className="flex-1 space-y-2 min-w-0">
+        {segments
+          .filter((s) => s.value > 0)
+          .map(({ label, value, hex }) => (
+            <div key={label} className="flex items-center gap-2">
+              <div
+                className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
+                style={{ background: hex }}
+              />
+              <span className="text-xs text-slate-600 capitalize truncate flex-1" style={{ maxWidth: 110 }}>
+                {label.replace(/_/g, " ")}
+              </span>
+              <span className="text-xs font-bold text-slate-700 tabular-nums ml-auto">
+                {value}
+              </span>
+            </div>
+          ))}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  AreaSparkline — pure SVG area + line chart with dots
+// ─────────────────────────────────────────────────────────────────────────────
+function AreaSparkline({
+  data,
+  color = "#3b82f6",
+  gradId,
+}: {
+  data: { label: string; value: number }[];
+  color?: string;
+  gradId: string;
+}) {
+  const W = 260; const H = 80;
+  const padX = 6; const padY = 10;
+  const maxVal = Math.max(...data.map((d) => d.value), 1);
+
+  const pts = data.map((d, i) => ({
+    x: padX + (i / Math.max(data.length - 1, 1)) * (W - 2 * padX),
+    y: H - padY - (d.value / maxVal) * (H - 2 * padY),
+    value: d.value,
+    label: d.label,
+  }));
+
+  const linePath = pts.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
+  const areaPath = `${linePath} L ${pts[pts.length - 1].x.toFixed(1)} ${H} L ${pts[0].x.toFixed(1)} ${H} Z`;
+
+  return (
+    <div>
+      <svg
+        width="100%"
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="none"
+        style={{ overflow: "visible" }}
+      >
+        <defs>
+          <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.25" />
+            <stop offset="100%" stopColor={color} stopOpacity="0.01" />
+          </linearGradient>
+        </defs>
+        {/* horizontal grid lines */}
+        {[0.25, 0.5, 0.75, 1].map((f) => (
+          <line
+            key={f}
+            x1={padX} y1={(H - padY) - f * (H - 2 * padY)}
+            x2={W - padX} y2={(H - padY) - f * (H - 2 * padY)}
+            stroke="#f1f5f9" strokeWidth="1"
+          />
+        ))}
+        <path d={areaPath} fill={`url(#${gradId})`} />
+        <path
+          d={linePath}
+          fill="none"
+          stroke={color}
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        {pts.map((p) => (
+          <g key={p.label}>
+            <circle cx={p.x} cy={p.y} r="4.5" fill="white" stroke={color} strokeWidth="2.5" />
+            {p.value > 0 && (
+              <text
+                x={p.x} y={p.y - 8}
+                textAnchor="middle"
+                style={{ fontSize: 9, fill: "#64748b", fontWeight: 600 }}
+              >
+                {p.value}
+              </text>
+            )}
+          </g>
+        ))}
+      </svg>
+      <div className="flex justify-between mt-2 px-1">
+        {data.map((d) => (
+          <span key={d.label} className="text-[9px] text-slate-400 font-medium">{d.label}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Stat Card — icon-accented KPI card
+// ─────────────────────────────────────────────────────────────────────────────
+function StatCard({
+  icon,
+  label,
+  value,
+  sub,
+  iconBg,
+  accentClass,
+  urgent,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: number | string;
+  sub?: string;
+  iconBg: string;
+  accentClass: string;
+  urgent?: boolean;
+}) {
+  return (
+    <div
+      className={`bg-white border border-slate-200 rounded-xl p-5 flex items-start gap-4 hover:shadow-md transition-shadow ${
+        urgent ? "border-amber-300 bg-amber-50/30" : ""
+      }`}
+    >
+      <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${iconBg}`}>
+        {icon}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">{label}</p>
+        <p className={`text-2xl font-bold font-display mt-0.5 leading-tight ${accentClass}`}>{value}</p>
+        {sub && (
+          <p className={`text-xs mt-1 font-medium ${urgent ? "text-amber-600" : "text-slate-400"}`}>{sub}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 //  Dashboard
 // ─────────────────────────────────────────────────────────────────────────────
 function DashboardView({
@@ -757,112 +959,218 @@ function DashboardView({
 
   return (
     <div className="view-enter space-y-6">
-      {/* Header */}
+
+      {/* ── Header ─────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900 tracking-tight font-display">Dashboard</h2>
-          <p className="text-slate-500 text-sm mt-1">
-            {total > 0 ? `${total} campaign${total !== 1 ? "s" : ""} · live analytics` : "All campaigns and pipeline status"}
+          <h2 className="text-2xl font-bold text-slate-900 tracking-tight font-display">Overview</h2>
+          <p className="text-slate-400 text-sm mt-0.5">
+            {total > 0
+              ? `${total} campaign${total !== 1 ? "s" : ""} total · live analytics`
+              : "Create your first campaign to get started"}
           </p>
         </div>
-        <button
-          onClick={refreshCampaigns}
-          className="btn-ghost text-sm flex items-center gap-2"
-        >
-          {loading ? <span className="btn-spinner-blue" /> : <span className="text-base">↻</span>}
+        <button onClick={refreshCampaigns} className="btn-ghost text-sm flex items-center gap-2">
+          {loading
+            ? <span className="btn-spinner-blue" />
+            : <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>}
           Refresh
         </button>
       </div>
 
-      {/* Metric cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 stagger-children">
-        <Metric label="Total Campaigns" value={total} />
-        <Metric label="Completed" value={completed} sub={total > 0 ? `${pct(completed, total)}% success` : undefined} accent="text-emerald-600" />
-        <Metric label="Awaiting Approval" value={awaiting} sub={awaiting > 0 ? "needs action" : undefined} accent={awaiting > 0 ? "text-amber-600" : "text-slate-900"} />
-        <Metric label="In Progress" value={inProgress} sub={dispatched > 0 ? `${dispatched} dispatched` : undefined} accent="text-blue-600" />
+      {/* ── KPI Strip ──────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+        <StatCard
+          icon={
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600">
+              <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+              <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+            </svg>
+          }
+          label="Total Campaigns" value={total} sub="all time"
+          iconBg="bg-blue-50" accentClass="text-slate-900"
+        />
+        <StatCard
+          icon={
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-600">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+          }
+          label="Completed" value={completed}
+          sub={total > 0 ? `${pct(completed, total)}% success rate` : "—"}
+          iconBg="bg-emerald-50" accentClass="text-emerald-700"
+        />
+        <StatCard
+          icon={
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-violet-600">
+              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+            </svg>
+          }
+          label="Active"
+          value={inProgress + dispatched}
+          sub={inProgress > 0 ? `${inProgress} in pipeline` : dispatched > 0 ? `${dispatched} dispatched` : "none running"}
+          iconBg="bg-violet-50" accentClass="text-violet-700"
+        />
+        <StatCard
+          icon={
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={awaiting > 0 ? "text-amber-600" : "text-slate-400"}>
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+          }
+          label="Needs Approval" value={awaiting}
+          sub={awaiting > 0 ? "action required" : "all clear"}
+          iconBg={awaiting > 0 ? "bg-amber-50" : "bg-slate-50"}
+          accentClass={awaiting > 0 ? "text-amber-700" : "text-slate-900"}
+          urgent={awaiting > 0}
+        />
       </div>
 
-      {/* Analytics section */}
-      {total > 0 && (
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div className="card p-5">
-              <h4 className="text-sm font-semibold text-slate-800 mb-4">Pipeline Distribution</h4>
-              {stateItems.length > 0 ? (
-                <HBarChart items={stateItems} maxVal={maxState} />
-              ) : (
-                <p className="text-slate-400 text-xs">No state data yet</p>
-              )}
-            </div>
-
-            <div className="card p-5 space-y-5">
-              <div>
-                <h4 className="text-sm font-semibold text-slate-800 mb-4">Channel Breakdown</h4>
-                {platformItems.length > 0 ? (
-                  <HBarChart items={platformItems} maxVal={maxPlatform} />
-                ) : (
-                  <p className="text-slate-400 text-xs">No channel data yet</p>
-                )}
-              </div>
-              {approvalItems.length > 0 && (
-                <div>
-                  <h4 className="text-sm font-semibold text-slate-800 mb-3">Approval Mode</h4>
-                  <HBarChart items={approvalItems} maxVal={maxApproval} />
-                </div>
-              )}
-            </div>
-
-            <div className="card p-5">
-              <h4 className="text-sm font-semibold text-slate-800 mb-4">
-                Campaigns Created{" "}
-                <span className="text-slate-400 font-normal">(last 7 days)</span>
-              </h4>
-              <MiniVBar items={dayItems} maxVal={maxDay} />
-              <div className="mt-4 pt-4 border-t border-slate-100 grid grid-cols-3 gap-2 text-center">
-                <div>
-                  <div className="text-xl font-bold text-emerald-600 font-display">{completed}</div>
-                  <div className="text-[11px] text-slate-400">Completed</div>
-                </div>
-                <div>
-                  <div className="text-xl font-bold text-blue-600 font-display">{dispatched}</div>
-                  <div className="text-[11px] text-slate-400">Dispatched</div>
-                </div>
-                <div>
-                  <div className="text-xl font-bold text-red-500 font-display">{failed}</div>
-                  <div className="text-[11px] text-slate-400">Failed</div>
-                </div>
-              </div>
-            </div>
+      {/* ── Needs Attention Banner ──────────────────────────────────────── */}
+      {awaiting > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl overflow-hidden">
+          <div className="flex items-center gap-2.5 px-5 py-3 border-b border-amber-200/70">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-amber-600">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            <span className="text-sm font-semibold text-amber-800">
+              {awaiting} campaign{awaiting !== 1 ? "s" : ""} awaiting your approval
+            </span>
           </div>
-
-          {/* Performance rings */}
-          <div className="card p-5">
-            <h4 className="text-sm font-semibold text-slate-800 mb-6">Performance Overview</h4>
-            <div className="flex flex-wrap gap-6 justify-around">
-              {[
-                { pctVal: pct(completed, total), hex: "#10b981", label: `${pct(completed, total)}%`, sub: "completed", title: "Completion Rate" },
-                { pctVal: pct(awaiting + inProgress, total), hex: "#f59e0b", label: `${awaiting + inProgress}`, sub: "campaigns", title: "Active" },
-                { pctVal: pct(failed, total), hex: "#ef4444", label: `${pct(failed, total)}%`, sub: "failure", title: "Failure Rate" },
-                { pctVal: pct(autoApprove, total), hex: "#3b82f6", label: `${pct(autoApprove, total)}%`, sub: "auto", title: "Auto-Approve" },
-                { pctVal: pct(dispatched + completed, total), hex: "#0ea5e9", label: `${dispatched + completed}`, sub: "campaigns", title: "Sent / Done" },
-              ].map((ring) => (
-                <div key={ring.title} className="flex flex-col items-center gap-2">
-                  <RingChart pct={ring.pctVal} hex={ring.hex} centerLabel={ring.label} centerSub={ring.sub} />
-                  <span className="text-xs text-slate-500">{ring.title}</span>
+          <div className="divide-y divide-amber-100/80">
+            {campaigns
+              .filter((c) => c.pipeline_state === "AWAITING_APPROVAL")
+              .map((c) => (
+                <div key={c.id} className="flex items-center justify-between gap-4 px-5 py-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-slate-800 truncate">{c.name}</p>
+                    <p className="text-xs text-slate-500 mt-0.5 truncate">{c.company} · {c.platform ?? "email"} · {fmt(c.created_at)}</p>
+                  </div>
+                  <div className="flex gap-2 shrink-0">
+                    <button onClick={() => handleApprove(c)} className="btn-success text-xs px-3 py-1.5">✓ Approve</button>
+                    <button onClick={() => onApproval(c)} className="btn-warning text-xs px-3 py-1.5">Review</button>
+                  </div>
                 </div>
               ))}
-            </div>
           </div>
         </div>
       )}
 
-      {/* Campaign list */}
-      <div className="card overflow-hidden">
+      {/* ── Charts ───────────────────────────────────────────────────────── */}
+      {total > 0 && (() => {
+        /* derive hex-based data for donut + sparkline */
+        const pipelineDonut = ([...PIPELINE_STEPS, "FAILED"] as string[])
+          .map((s) => ({
+            label: s,
+            value: campaigns.filter((c) => c.pipeline_state === s).length,
+            hex: CHART_HEX[s] ?? "#94a3b8",
+          }))
+          .filter((x) => x.value > 0);
+
+        const platformDonut = uniquePlatforms.map((p) => ({
+          label: p,
+          value: rawPlatforms.filter((x) => x === p).length,
+          hex: CHART_HEX[p] ?? "#3b82f6",
+        }));
+
+        const sparkData = dayItems.map((d) => ({ label: d.label, value: d.value }));
+
+        return (
+          <div className="space-y-4">
+            {/* Row 1: donut (wider) + channels + sparkline */}
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+
+              {/* Pipeline Donut — spans 2 cols */}
+              <div className="bg-white border border-slate-200 rounded-xl p-5 lg:col-span-2">
+                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-4">Campaign Status Distribution</p>
+                <DonutChart
+                  segments={pipelineDonut}
+                  centerLabel={String(total)}
+                  centerSub="campaigns"
+                />
+              </div>
+
+              {/* Channel + Approval mix */}
+              <div className="bg-white border border-slate-200 rounded-xl p-5 space-y-5">
+                <div>
+                  <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-4">Channel Mix</p>
+                  {platformDonut.length > 0 ? (
+                    <DonutChart
+                      segments={platformDonut}
+                      centerLabel={String(total)}
+                      centerSub="sent"
+                    />
+                  ) : (
+                    <p className="text-slate-300 text-xs py-6 text-center">No data yet</p>
+                  )}
+                </div>
+                {approvalItems.length > 0 && (
+                  <div className="pt-4 border-t border-slate-100">
+                    <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-3">Approval Mode</p>
+                    <HBarChart items={approvalItems} maxVal={maxApproval} />
+                  </div>
+                )}
+              </div>
+
+              {/* 7-day Area Sparkline */}
+              <div className="bg-white border border-slate-200 rounded-xl p-5">
+                <div className="flex items-center justify-between mb-5">
+                  <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Campaigns Created</p>
+                  <span className="text-[10px] text-slate-400 bg-slate-50 border border-slate-100 px-2 py-0.5 rounded-full">7 days</span>
+                </div>
+                <AreaSparkline data={sparkData} color="#3b82f6" gradId="dash-spark" />
+                <div className="mt-5 pt-4 border-t border-slate-100 grid grid-cols-3 gap-2 text-center">
+                  <div>
+                    <p className="text-base font-bold text-emerald-600 font-display leading-tight">{completed}</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Done</p>
+                  </div>
+                  <div>
+                    <p className="text-base font-bold text-blue-600 font-display leading-tight">{dispatched}</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Sent</p>
+                  </div>
+                  <div>
+                    <p className="text-base font-bold text-red-500 font-display leading-tight">{failed}</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Failed</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Row 2: Performance Ring Strip */}
+            <div className="bg-white border border-slate-200 rounded-xl p-5">
+              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-5">Performance Overview</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-6">
+                {[
+                  { hex: "#10b981", label: `${pct(completed, total)}%`, sub: "completion",   title: "Completion Rate",  pctVal: pct(completed, total) },
+                  { hex: "#3b82f6", label: `${inProgress + dispatched}`, sub: "running",    title: "Active Now",       pctVal: pct(inProgress + dispatched, total) },
+                  { hex: "#ef4444", label: `${pct(failed, total)}%`,     sub: "failure",     title: "Failure Rate",    pctVal: pct(failed, total) },
+                  { hex: "#f59e0b", label: `${pct(autoApprove, total)}%`,sub: "auto-send",   title: "Auto-Approve",    pctVal: pct(autoApprove, total) },
+                  { hex: "#8b5cf6", label: `${awaiting}`,               sub: "pending",     title: "Awaiting Approval",pctVal: pct(awaiting, total) },
+                ].map((ring) => (
+                  <div key={ring.title} className="flex flex-col items-center gap-2">
+                    <RingChart pct={ring.pctVal} hex={ring.hex} centerLabel={ring.label} centerSub={ring.sub} />
+                    <span className="text-[11px] text-slate-500 font-medium text-center">{ring.title}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Campaign Table ──────────────────────────────────────────────── */}
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
         <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-          <h3 className="font-semibold text-slate-800 text-sm">Campaign List</h3>
-          {awaiting > 0 && (
-            <span className="bg-amber-50 text-amber-700 border border-amber-200 text-xs font-medium px-2.5 py-1 rounded-full">
-              {awaiting} awaiting approval
+          <div className="flex items-center gap-2.5">
+            <h3 className="text-sm font-semibold text-slate-800">All Campaigns</h3>
+            {total > 0 && (
+              <span className="text-[11px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-medium">{total}</span>
+            )}
+          </div>
+          {failed > 0 && (
+            <span className="text-[11px] text-red-600 bg-red-50 border border-red-100 px-2.5 py-1 rounded-full font-semibold">
+              {failed} failed
             </span>
           )}
         </div>
@@ -873,61 +1181,80 @@ function DashboardView({
             <span className="text-slate-400 text-sm">Loading campaigns…</span>
           </div>
         ) : campaigns.length === 0 ? (
-          <div className="py-16 text-center">
-            <div className="text-4xl mb-3">🚀</div>
-            <div className="text-slate-600 text-sm font-medium">No campaigns yet</div>
-            <div className="text-slate-400 text-xs mt-1">Create your first campaign to see analytics here</div>
+          <div className="py-16 flex flex-col items-center gap-3">
+            <div className="w-14 h-14 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-slate-300">
+                <path d="M3 9h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9z"/>
+                <path d="M3 9l2.45-4.9A2 2 0 0 1 7.24 3h9.52a2 2 0 0 1 1.8 1.1L21 9"/>
+                <path d="M12 3v6"/>
+              </svg>
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-semibold text-slate-700">No campaigns yet</p>
+              <p className="text-xs text-slate-400 mt-1">Use "New Campaign" in the sidebar to get started</p>
+            </div>
           </div>
         ) : (
-          <div className="divide-y divide-slate-50">
-            {campaigns.map((c, idx) => (
-              <div
-                key={c.id}
-                className="flex items-center gap-4 px-5 py-4 hover:bg-blue-50/40 transition-all duration-200 card-enter"
-                style={{ animationDelay: `${idx * 0.04}s` }}
-              >
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <button
-                      onClick={() => onSelect(c)}
-                      className="font-medium text-slate-800 text-sm hover:text-blue-600 transition-colors truncate"
-                    >
-                      {c.name}
-                    </button>
-                    <span className={`shrink-0 text-[11px] px-2 py-0.5 rounded-full font-medium ${stateColor(c.pipeline_state)}`}>
-                      {c.pipeline_state.replace(/_/g, " ")}
-                    </span>
-                    {c.approval_required && (
-                      <span className="shrink-0 text-[11px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
-                        approval req
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-slate-400 text-xs">
-                    {c.company} · {c.platform ?? "email"} · {fmt(c.created_at)}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  {c.pipeline_state === "AWAITING_APPROVAL" && (
-                    <>
-                      <button onClick={() => onApproval(c)} className="btn-warning text-xs px-3 py-1.5">
-                        Review &amp; Approve
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-100 bg-slate-50/60">
+                  <th className="px-5 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Campaign</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Status</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider hidden md:table-cell">Platform</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider hidden lg:table-cell">Company</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider hidden xl:table-cell">Created</th>
+                  <th className="px-5 py-3 text-right text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {campaigns.map((c) => (
+                  <tr
+                    key={c.id}
+                    className="border-b border-slate-50 hover:bg-slate-50/70 transition-colors group"
+                  >
+                    <td className="px-5 py-4">
+                      <button
+                        onClick={() => onSelect(c)}
+                        className="font-semibold text-slate-800 hover:text-blue-600 transition-colors text-left max-w-[260px] block truncate"
+                      >
+                        {c.name}
                       </button>
-                    </>
-                  )}
-                  <button onClick={() => onAnalytics(c)} className="btn-ghost text-xs px-3 py-1.5">
-                    Analytics
-                  </button>
-                  <button onClick={() => onSelect(c)} className="btn-ghost text-xs px-3 py-1.5">
-                    View
-                  </button>
-                </div>
-              </div>
-            ))}
+                      {c.approval_required && (
+                        <span className="text-[10px] text-slate-400">approval required</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-4">
+                      <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-semibold whitespace-nowrap ${stateColor(c.pipeline_state)}`}>
+                        {c.pipeline_state.replace(/_/g, " ")}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4 hidden md:table-cell">
+                      <span className="text-xs text-slate-500 capitalize">{c.platform ?? "email"}</span>
+                    </td>
+                    <td className="px-4 py-4 hidden lg:table-cell">
+                      <span className="text-xs text-slate-500 truncate max-w-[160px] block">{c.company ?? "—"}</span>
+                    </td>
+                    <td className="px-4 py-4 hidden xl:table-cell">
+                      <span className="text-xs text-slate-400 font-mono tabular-nums">{fmt(c.created_at)}</span>
+                    </td>
+                    <td className="px-5 py-4 text-right">
+                      <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {c.pipeline_state === "AWAITING_APPROVAL" && (
+                          <button onClick={() => onApproval(c)} className="btn-warning text-xs px-2.5 py-1">Review</button>
+                        )}
+                        <button onClick={() => onAnalytics(c)} className="btn-ghost text-xs px-2.5 py-1">Analytics</button>
+                        <button onClick={() => onSelect(c)} className="btn-ghost text-xs px-2.5 py-1">View</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
+
     </div>
   );
 }
@@ -1000,7 +1327,7 @@ function CreateView({
         <div className="create-chat-greeting animate-fade-in-up">
           <h1 className="create-chat-title font-display">
             What would you like to<br />
-            <span className="text-gradient-brand">campaign today?</span>
+            <span className="text-blue-600">campaign today?</span>
           </h1>
           <p className="create-chat-subtitle">
             Describe your outreach goal. Our AI agents will find the right audience, pick the best channels, and craft personalized messages.
@@ -1440,7 +1767,7 @@ function DetailView({
         <button onClick={onBack} className="text-slate-400 hover:text-blue-600 text-sm transition-colors">
           ← Back
         </button>
-        <h2 className="text-2xl font-bold text-slate-900 truncate tracking-tight font-display">
+        <h2 className="text-xl font-bold text-slate-900 truncate tracking-tight font-display">
           {campaign.name}
         </h2>
         <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${stateColor(campaign.pipeline_state)}`}>
@@ -1471,7 +1798,7 @@ function DetailView({
       </div>
 
       {/* Meta */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           { label: "Company",        val: campaign.company },
           { label: "Target",         val: campaign.target_audience },
@@ -1742,7 +2069,7 @@ function AnalyticsView({
           ← Back
         </button>
         <div>
-          <h2 className="text-2xl font-bold text-slate-900 tracking-tight font-display">Analytics</h2>
+          <h2 className="text-xl font-bold text-slate-900 tracking-tight font-display">Analytics</h2>
           <p className="text-slate-500 text-sm truncate">{campaign.name}</p>
         </div>
       </div>
@@ -1759,19 +2086,17 @@ function AnalyticsView({
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 stagger-children">
+          <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-4 stagger-children">
             <Metric label="Total Contacts" value={data.total_contacts} />
             <Metric label="Sent" value={data.sent} accent="text-blue-600" />
             <Metric label="Opened" value={data.opened} sub={`${data.open_rate}%`} accent="text-violet-600" />
             <Metric label="Clicked" value={data.clicked} sub={`${data.click_rate}%`} accent="text-pink-600" />
-          </div>
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-            <Metric label="Answered Calls" value={data.answered} />
+            <Metric label="Answered" value={data.answered} />
             <Metric label="Conversions" value={`${data.conversion_rate}%`} accent="text-emerald-600" />
             <Metric label="Delivery Rate" value={`${pct(data.sent, data.total_contacts)}%`} accent="text-blue-600" />
           </div>
 
-          <div className="card p-6 space-y-5">
+          <div className="card p-6 space-y-5 w-full">
             <h3 className="font-semibold text-slate-800 text-sm">Engagement Funnel</h3>
             <Bar label="Sent" value={data.sent} max={data.total_contacts} color="bg-blue-500" />
             <Bar label="Opened" value={data.opened} max={data.sent || 1} color="bg-violet-500" />
@@ -1836,6 +2161,10 @@ function ApprovalView({
   const [approvedChannels, setApprovedChannels] = useState<Set<string>>(new Set());
   const [regeneratingChannel, setRegeneratingChannel] = useState<string>("");
 
+  // Cache all received channel content so user can switch between tabs
+  const [channelCache, setChannelCache] = useState<Record<string, { content: Record<string, string>; contacts: string[] }>>({});
+  const [viewingChannel, setViewingChannel] = useState<string>("");
+
   const [editFields, setEditFields] = useState<Record<string, string>>({});
   const [isEditing, setIsEditing] = useState(false);
   const [approvingAll, setApprovingAll] = useState(false);
@@ -1877,15 +2206,20 @@ function ApprovalView({
         }
         if (msg.type === "CHANNEL_CONTENT") {
           const fields = contentToFields(msg.content);
+          const ch = msg.channel ?? "";
+          const contacts = msg.contacts ?? [];
+          // Cache this channel's content
+          setChannelCache((prev) => ({ ...prev, [ch]: { content: fields, contacts } }));
           setCurrentContent(fields);
           setEditFields(fields);
-          setCurrentContacts(msg.contacts ?? []);
-          setCurrentChannel(msg.channel ?? "");
+          setCurrentContacts(contacts);
+          setCurrentChannel(ch);
+          setViewingChannel(ch);  // auto-focus the newly-arrived channel
           setIsEditing(false);
           setRegeneratingChannel("");
         }
         if (msg.type === "CONTENT_UPDATED") {
-          // Template was saved — next CHANNEL_CONTENT will refresh display
+          // Refresh cache for the updated channel on next CHANNEL_CONTENT
         }
         if (msg.type === "CHANNEL_APPROVED") {
           setApprovedChannels((prev) => new Set([...prev, msg.channel ?? ""]));
@@ -1971,7 +2305,7 @@ function ApprovalView({
   const hasContent = Object.keys(currentContent).length > 0;
 
   return (
-    <div className="view-enter space-y-6 max-w-3xl">
+    <div className="view-enter space-y-6 w-full">
       {/* Header */}
       <div className="flex items-center gap-3">
         <button onClick={onBack} className="text-slate-400 hover:text-blue-600 text-sm transition-colors">
@@ -2006,28 +2340,51 @@ function ApprovalView({
         </div>
       ) : (
         <>
-          {/* Channel summary pills */}
+          {/* Channel tab pills */}
           {channels.length > 0 && (
-            <div className="flex gap-3 flex-wrap">
+            <div className="flex gap-2 flex-wrap">
               {channels.map((ch) => {
-                const isApproved = approvedChannels.has(ch);
-                const isCurrent = currentChannel === ch;
+                const isApproved  = approvedChannels.has(ch);
+                const isActive    = ch === currentChannel;   // server is waiting on this one
+                const isViewing   = ch === viewingChannel;
+                const isCached    = !!channelCache[ch];
+                const isRegen     = regeneratingChannel === ch;
+
                 return (
-                  <div
+                  <button
                     key={ch}
-                    className={`px-4 py-2 rounded-xl flex items-center gap-2 border transition-all ${
-                      isApproved
-                        ? "bg-emerald-50 border-emerald-200"
-                        : isCurrent
-                        ? "bg-blue-50 border-blue-200"
-                        : "bg-white border-slate-100"
+                    onClick={() => { if (isCached) setViewingChannel(ch); }}
+                    disabled={!isCached}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-xl border transition-all text-sm font-medium ${
+                      isViewing
+                        ? isApproved
+                          ? "bg-emerald-50 border-emerald-300 text-emerald-700 ring-1 ring-emerald-200"
+                          : "bg-blue-50 border-blue-300 text-blue-700 ring-1 ring-blue-200"
+                        : isApproved
+                        ? "bg-emerald-50 border-emerald-200 text-emerald-600 hover:border-emerald-300"
+                        : isCached
+                        ? "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-blue-200"
+                        : "bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed"
                     }`}
                   >
-                    <span className="text-base">{CHANNEL_ICONS[ch] ?? "📨"}</span>
-                    <span className="text-sm text-slate-700 font-medium">{ch}</span>
-                    <span className="text-xs text-slate-400">{channelCounts[ch] ?? 0} contacts</span>
-                    {isApproved && <span className="text-xs text-emerald-600 font-semibold">✓</span>}
-                  </div>
+                    <span>{CHANNEL_ICONS[ch] ?? "📨"}</span>
+                    <span>{ch}</span>
+                    <span className={`text-xs ${
+                      isViewing ? (isApproved ? "text-emerald-500" : "text-blue-500") : "text-slate-400"
+                    }`}>
+                      {channelCounts[ch] ?? 0} contacts
+                    </span>
+                    {isApproved && <span className="text-emerald-500 font-bold">✓</span>}
+                    {isRegen && <span className="btn-spinner-blue" style={{ width: 10, height: 10 }} />}
+                    {isActive && !isApproved && !isRegen && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                    )}
+                    {!isCached && !isActive && (
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-slate-300">
+                        <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                      </svg>
+                    )}
+                  </button>
                 );
               })}
             </div>
@@ -2074,43 +2431,61 @@ function ApprovalView({
           )}
 
           {/* Channel template review card */}
-          {hasContent && currentChannel && (
+          {(() => {
+            const displayCh      = viewingChannel || currentChannel;
+            const cached         = channelCache[displayCh];
+            const displayContent = displayCh === currentChannel ? currentContent : (cached?.content ?? {});
+            const displayContacts = displayCh === currentChannel ? currentContacts : (cached?.contacts ?? []);
+            const isServerChannel = displayCh === currentChannel;   // server waiting on this
+            const isApproved     = approvedChannels.has(displayCh);
+            const canAct         = isServerChannel && !isApproved;  // show edit/approve buttons
+            const hasDisplay     = Object.keys(displayContent).length > 0;
+
+            if (!displayCh || !hasDisplay) return null;
+
+            return (
             <div className="card p-6 border border-blue-100">
               <div className="flex items-center gap-3 mb-5">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white text-lg shrink-0">
-                  {CHANNEL_ICONS[currentChannel] ?? "📨"}
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-lg shrink-0 ${
+                  isApproved ? "bg-gradient-to-br from-emerald-400 to-emerald-600" : "bg-gradient-to-br from-blue-400 to-blue-600"
+                }`}>
+                  {CHANNEL_ICONS[displayCh] ?? "📨"}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-slate-800">{currentChannel} Template</div>
+                  <div className="font-semibold text-slate-800">{displayCh} Template</div>
                   <div className="text-xs text-slate-400 mt-0.5">
-                    Will be sent to {channelCounts[currentChannel] ?? 0} contacts
+                    {isApproved
+                      ? <span className="text-emerald-600 font-medium">✓ Approved — sent to {channelCounts[displayCh] ?? 0} contacts</span>
+                      : `Will be sent to ${channelCounts[displayCh] ?? 0} contacts`}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  {!isEditing && (
-                    <button
-                      onClick={() => setIsEditing(true)}
-                      className="btn-ghost text-xs px-3 py-1.5"
-                    >
+                  {canAct && !isEditing && (
+                    <button onClick={() => { setEditFields(displayContent); setIsEditing(true); }} className="btn-ghost text-xs px-3 py-1.5">
                       ✎ Edit
                     </button>
                   )}
-                  <button
-                    onClick={sendRegenerate}
-                    disabled={!!regeneratingChannel}
-                    className="btn-ghost text-xs px-3 py-1.5"
-                  >
-                    {regeneratingChannel === currentChannel ? (
-                      <><span className="btn-spinner-blue" style={{ width: 12, height: 12 }} /> Regenerating…</>
-                    ) : "↺ Regenerate"}
-                  </button>
+                  {canAct && (
+                    <button
+                      onClick={sendRegenerate}
+                      disabled={!!regeneratingChannel}
+                      className="btn-ghost text-xs px-3 py-1.5"
+                    >
+                      {regeneratingChannel === displayCh ? (
+                        <><span className="btn-spinner-blue" style={{ width: 12, height: 12 }} /> Regenerating…</>
+                      ) : "↺ Regenerate"}
+                    </button>
+                  )}
+                  {!canAct && !isApproved && (
+                    <span className="text-xs text-slate-400 italic">Waiting for earlier channels…</span>
+                  )}
                 </div>
               </div>
 
               {/* Template preview or editor */}
-              {!isEditing ? (
+              {!isEditing || !canAct ? (
                 <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 space-y-3 mb-5">
-                  {Object.entries(currentContent).map(([k, v]) => (
+                  {Object.entries(displayContent).map(([k, v]) => (
                     <div key={k}>
                       <div className="text-[11px] text-slate-400 uppercase tracking-wider mb-0.5 font-medium">
                         {k.replace(/_/g, " ")}
@@ -2137,49 +2512,49 @@ function ApprovalView({
                 </div>
               )}
 
-              {/* Sample contacts for this channel */}
-              {currentContacts.length > 0 && (
+              {/* Recipients */}
+              {displayContacts.length > 0 && (
                 <div className="mb-5">
                   <div className="text-[11px] text-slate-400 uppercase tracking-wider mb-2 font-medium">
-                    Recipients ({channelCounts[currentChannel] ?? currentContacts.length} contacts)
+                    Recipients ({channelCounts[displayCh] ?? displayContacts.length} contacts)
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {currentContacts.map((email) => (
+                    {displayContacts.map((email) => (
                       <span key={email} className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full">
                         {email}
                       </span>
                     ))}
-                    {(channelCounts[currentChannel] ?? 0) > currentContacts.length && (
+                    {(channelCounts[displayCh] ?? 0) > displayContacts.length && (
                       <span className="text-xs text-slate-400 px-2 py-1">
-                        +{(channelCounts[currentChannel] ?? 0) - currentContacts.length} more
+                        +{(channelCounts[displayCh] ?? 0) - displayContacts.length} more
                       </span>
                     )}
                   </div>
                 </div>
               )}
 
-              {/* Channel action row */}
-              <div className="flex items-center gap-3">
-                {isEditing ? (
-                  <>
-                    <button onClick={sendEdit} className="btn-brand text-sm px-5 py-2.5 flex items-center gap-1.5">
-                      💾 Save Changes
+              {/* Action row — only for the server-active channel */}
+              {canAct && (
+                <div className="flex items-center gap-3">
+                  {isEditing ? (
+                    <>
+                      <button onClick={sendEdit} className="btn-brand text-sm px-5 py-2.5 flex items-center gap-1.5">
+                        💾 Save Changes
+                      </button>
+                      <button onClick={() => { setIsEditing(false); setEditFields(currentContent); }} className="btn-ghost text-sm px-4 py-2.5">
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <button onClick={sendApprove} className="btn-success text-sm px-6 py-2.5 flex items-center gap-2">
+                      ✓ Approve {displayCh} Template
                     </button>
-                    <button onClick={() => { setIsEditing(false); setEditFields(currentContent); }} className="btn-ghost text-sm px-4 py-2.5">
-                      Cancel
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    onClick={sendApprove}
-                    className="btn-success text-sm px-6 py-2.5 flex items-center gap-2"
-                  >
-                    ✓ Approve {currentChannel} Template
-                  </button>
-                )}
-              </div>
+                  )}
+                </div>
+              )}
             </div>
-          )}
+            );
+          })()}
 
           {/* Loading / connecting states */}
           {!connected && connecting && (
@@ -2362,7 +2737,7 @@ function TrackingView({
               <div className="text-slate-400 text-sm">No dispatched or completed campaigns yet</div>
             </div>
           ) : (
-            <div className="grid grid-cols-2 xl:grid-cols-3 gap-3 max-h-[500px] overflow-y-auto pr-1">
+            <div className="grid grid-cols-2 xl:grid-cols-3 gap-3 max-h-[calc(100vh-14rem)] overflow-y-auto pr-1">
               {eligible.map((c) => (
                 <CampaignKanbanCard
                   key={c.id}
@@ -2558,7 +2933,7 @@ function HistoryView({
       </div>
 
       <div className="flex gap-6 items-start">
-        <div className="w-72 shrink-0">
+        <div className="w-64 xl:w-80 shrink-0">
           <div className="text-xs text-slate-400 uppercase tracking-wider mb-3">
             Campaigns ({campaigns.length})
           </div>
@@ -2568,7 +2943,7 @@ function HistoryView({
               <div className="text-slate-400 text-sm">No campaigns yet</div>
             </div>
           ) : (
-            <div className="flex flex-col gap-3 max-h-[600px] overflow-y-auto pr-1">
+            <div className="flex flex-col gap-3 max-h-[calc(100vh-14rem)] overflow-y-auto pr-1">
               {campaigns.map((c) => {
                 const logCount = c.id === selectedId && tab === "logs" ? logs.length : null;
                 const msgCount = c.id === selectedId && tab === "messages" ? messages.length : null;
@@ -2780,153 +3155,162 @@ function SettingsView({
   }
 
   return (
-    <div className="view-enter space-y-6 max-w-lg">
-      <div>
+    <div className="view-enter w-full">
+      <div className="mb-6">
         <h2 className="text-xl font-bold text-slate-900 font-display">Settings</h2>
         <p className="text-slate-500 text-sm">Manage your profile and security</p>
       </div>
 
-      {/* Avatar banner */}
-      <div className="card p-6">
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white text-xl font-bold uppercase shadow-glow">
-            {(fullName || email).charAt(0)}
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        {/* Left column — avatar + session + about */}
+        <div className="space-y-4">
+          {/* Avatar banner */}
+          <div className="bg-white border border-slate-200 rounded-lg p-5">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white text-lg font-bold uppercase">
+                {(fullName || email).charAt(0)}
+              </div>
+              <div>
+                <div className="text-base font-semibold text-slate-800">{fullName || email}</div>
+                <div className="text-xs text-slate-400 mt-0.5">{email}</div>
+                <div className={`inline-flex mt-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                  role === "ADMIN"
+                    ? "bg-blue-100 text-blue-700 border border-blue-200"
+                    : "bg-slate-100 text-slate-600 border border-slate-200"
+                }`}>
+                  {role === "ADMIN" ? "Admin — full access" : "Viewer"}
+                </div>
+              </div>
+            </div>
           </div>
-          <div>
-            <div className="text-base font-semibold text-slate-800">{fullName || email}</div>
-            <div className="text-xs text-slate-400 mt-0.5">{email}</div>
-            <div className={`inline-flex mt-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-              role === "ADMIN"
-                ? "bg-blue-100 text-blue-700 border border-blue-200"
-                : "bg-slate-100 text-slate-600 border border-slate-200"
-            }`}>
-              {role === "ADMIN" ? "Admin — full access" : "Viewer"}
+
+          {/* Sign out */}
+          <div className="bg-white border border-slate-200 rounded-lg p-5">
+            <h3 className="text-sm font-semibold text-slate-800 mb-1">Session</h3>
+            <p className="text-xs text-slate-500 mb-4">Sign out of InFynd on this device.</p>
+            <button
+              onClick={onLogout}
+              className="btn-danger text-sm px-5 py-2.5 flex items-center gap-2"
+            >
+              <span>←</span> Sign Out
+            </button>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-lg p-5">
+            <h3 className="text-sm font-semibold text-slate-800 mb-1">About InFynd Campaign Engine</h3>
+            <p className="text-xs text-slate-500 leading-relaxed">
+              InFynd uses a multi-agent AI pipeline to find the right contacts, craft personalized outreach messages, and send them across email, LinkedIn, and phone — all from a single prompt.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {["AI-Powered", "Multi-channel", "Auto-personalized", "Real-time analytics"].map((tag) => (
+                <span key={tag} className="text-[11px] px-2.5 py-1 rounded-full bg-blue-50 text-blue-600 border border-blue-100 font-medium">
+                  {tag}
+                </span>
+              ))}
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Tabs */}
-      <div className="flex rounded-xl bg-slate-100 p-1">
-        {(["profile", "security"] as const).map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => setTab(t)}
-            className={`flex-1 py-2.5 text-sm font-semibold rounded-lg capitalize transition-all ${
-              tab === t ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
-            }`}
-          >
-            {t === "profile" ? "Profile" : "Security"}
-          </button>
-        ))}
-      </div>
+        {/* Right column — tabs + forms */}
+        <div className="xl:col-span-2 space-y-4">
+          {/* Tabs */}
+          <div className="flex rounded-xl bg-slate-100 p-1 w-fit">
+            {(["profile", "security"] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setTab(t)}
+                className={`px-6 py-2.5 text-sm font-semibold rounded-lg capitalize transition-all ${
+                  tab === t ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                {t === "profile" ? "Profile" : "Security"}
+              </button>
+            ))}
+          </div>
 
-      {tab === "profile" && (
-        <form className="card p-6 space-y-5" onSubmit={handleSaveProfile}>
-          <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-2">Full Name</label>
-            <input
-              type="text"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              className="input-premium"
-              placeholder="John Doe"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-2">Email Address</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="input-premium"
-              required
-            />
-            <p className="text-xs text-slate-400 mt-1.5">
-              Changing to an <span className="text-blue-500 font-medium">@infynd.com</span> address upgrades your role to Admin.
-            </p>
-          </div>
-          <button
-            type="submit"
-            disabled={profileLoading}
-            className="btn-brand text-sm px-6 py-2.5 flex items-center gap-2"
-          >
-            {profileLoading ? <><span className="btn-spinner" /> Saving…</> : "💾 Save Profile"}
-          </button>
-        </form>
-      )}
+          {tab === "profile" && (
+            <form className="bg-white border border-slate-200 rounded-lg p-5 space-y-4" onSubmit={handleSaveProfile}>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Full Name</label>
+                <input
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className="input-premium"
+                  placeholder="John Doe"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Email Address</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="input-premium"
+                  required
+                />
+                <p className="text-xs text-slate-400 mt-1.5">
+                  Changing to an <span className="text-blue-500 font-medium">@infynd.com</span> address upgrades your role to Admin.
+                </p>
+              </div>
+              <button
+                type="submit"
+                disabled={profileLoading}
+                className="btn-brand text-sm px-6 py-2.5 flex items-center gap-2"
+              >
+                {profileLoading ? <><span className="btn-spinner" /> Saving…</> : "💾 Save Profile"}
+              </button>
+            </form>
+          )}
 
-      {tab === "security" && (
-        <form className="card p-6 space-y-5" onSubmit={handleChangePassword}>
-          <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-2">Current Password</label>
-            <input
-              type="password"
-              value={currentPw}
-              onChange={(e) => setCurrentPw(e.target.value)}
-              className="input-premium"
-              placeholder="••••••••"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-2">New Password</label>
-            <input
-              type="password"
-              value={newPw}
-              onChange={(e) => setNewPw(e.target.value)}
-              className="input-premium"
-              placeholder="••••••••"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-2">Confirm New Password</label>
-            <input
-              type="password"
-              value={confirmPw}
-              onChange={(e) => setConfirmPw(e.target.value)}
-              className="input-premium"
-              placeholder="••••••••"
-              required
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={pwLoading}
-            className="btn-brand text-sm px-6 py-2.5 flex items-center gap-2"
-          >
-            {pwLoading ? <><span className="btn-spinner" /> Updating…</> : "🔑 Change Password"}
-          </button>
-        </form>
-      )}
+          {tab === "security" && (
+            <form className="bg-white border border-slate-200 rounded-lg p-5 space-y-4" onSubmit={handleChangePassword}>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Current Password</label>
+                <input
+                  type="password"
+                  value={currentPw}
+                  onChange={(e) => setCurrentPw(e.target.value)}
+                  className="input-premium"
+                  placeholder="••••••••"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">New Password</label>
+                <input
+                  type="password"
+                  value={newPw}
+                  onChange={(e) => setNewPw(e.target.value)}
+                  className="input-premium"
+                  placeholder="••••••••"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Confirm New Password</label>
+                <input
+                  type="password"
+                  value={confirmPw}
+                  onChange={(e) => setConfirmPw(e.target.value)}
+                  className="input-premium"
+                  placeholder="••••••••"
+                  required
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={pwLoading}
+                className="btn-brand text-sm px-6 py-2.5 flex items-center gap-2"
+              >
+                {pwLoading ? <><span className="btn-spinner" /> Updating…</> : "🔑 Change Password"}
+              </button>
+            </form>
+          )}
 
-      {/* Sign out */}
-      <div className="card p-6">
-        <h3 className="text-sm font-semibold text-slate-800 mb-1">Session</h3>
-        <p className="text-xs text-slate-500 mb-4">Sign out of InFynd on this device.</p>
-        <button
-          onClick={onLogout}
-          className="btn-danger text-sm px-5 py-2.5 flex items-center gap-2"
-        >
-          <span>←</span> Sign Out
-        </button>
-      </div>
-
-      <div className="card p-6">
-        <h3 className="text-sm font-semibold text-slate-800 mb-1">About InFynd Campaign Engine</h3>
-        <p className="text-xs text-slate-500 leading-relaxed">
-          InFynd uses a multi-agent AI pipeline to find the right contacts, craft personalized outreach messages, and send them across email, LinkedIn, and phone — all from a single prompt.
-        </p>
-        <div className="mt-4 flex flex-wrap gap-2">
-          {["AI-Powered", "Multi-channel", "Auto-personalized", "Real-time analytics"].map((tag) => (
-            <span key={tag} className="text-[11px] px-2.5 py-1 rounded-full bg-blue-50 text-blue-600 border border-blue-100 font-medium">
-              {tag}
-            </span>
-          ))}
-        </div>
-      </div>
+        </div>{/* end right column */}
+      </div>{/* end grid */}
     </div>
   );
 }
@@ -3142,7 +3526,7 @@ export default function App() {
   return (
     <>
       <Toasts toasts={toasts} remove={removeToast} />
-      <div className="flex min-h-screen bg-[#f0f4ff]">
+      <div className="flex h-screen overflow-hidden bg-[#f8fafc]">
         <Sidebar
           view={view}
           setView={setView}
@@ -3150,7 +3534,7 @@ export default function App() {
           role={role}
           onLogout={handleLogout}
         />
-        <main className="flex-1 p-8 overflow-y-auto">
+        <main className="flex-1 p-6 overflow-y-auto min-h-0">
           {renderMain()}
         </main>
       </div>
