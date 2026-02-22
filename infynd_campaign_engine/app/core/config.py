@@ -73,6 +73,8 @@ class Settings:
     # SendGrid
     SENDGRID_API_KEY: str = os.getenv("SENDGRID_API_KEY", "")
     SENDGRID_FROM_EMAIL: str = os.getenv("SENDGRID_FROM_EMAIL", "noreply@infynd.com")
+    SENDGRID_FROM_NAME: str = os.getenv("SENDGRID_FROM_NAME", "InFynd")
+    SENDGRID_REPLY_TO_EMAIL: str = os.getenv("SENDGRID_REPLY_TO_EMAIL", "")
     SENDGRID_WEBHOOK_SECRET: str = os.getenv("SENDGRID_WEBHOOK_SECRET", "")
 
     # Google OAuth

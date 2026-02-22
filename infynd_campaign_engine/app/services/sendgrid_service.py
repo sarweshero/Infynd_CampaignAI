@@ -21,6 +21,7 @@ async def send_email(
     subject: str,
     html_body: str,
     campaign_id: str,
+    plain_text: str = "",
     message_id_prefix: str = "",
 ) -> Optional[str]:
     """Send an email via SendGrid and return the X-Message-Id header."""
@@ -28,6 +29,14 @@ async def send_email(
         "Authorization": f"Bearer {settings.SENDGRID_API_KEY}",
         "Content-Type": "application/json",
     }
+
+    reply_to_email = settings.SENDGRID_REPLY_TO_EMAIL or settings.SENDGRID_FROM_EMAIL
+
+    # Build content blocks — always include plain-text to avoid spam flags
+    content_blocks = []
+    if plain_text:
+        content_blocks.append({"type": "text/plain", "value": plain_text})
+    content_blocks.append({"type": "text/html", "value": html_body})
 
     payload = {
         "personalizations": [
@@ -38,12 +47,28 @@ async def send_email(
                 },
             }
         ],
-        "from": {"email": settings.SENDGRID_FROM_EMAIL},
+        "from": {
+            "email": settings.SENDGRID_FROM_EMAIL,
+            "name": settings.SENDGRID_FROM_NAME,
+        },
+        "reply_to": {
+            "email": reply_to_email,
+            "name": settings.SENDGRID_FROM_NAME,
+        },
         "subject": subject,
-        "content": [{"type": "text/html", "value": html_body}],
+        "content": content_blocks,
+        "headers": {
+            # List-Unsubscribe makes Gmail route to Promotions instead of Spam
+            "List-Unsubscribe": f"<mailto:{reply_to_email}?subject=Unsubscribe>",
+            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+            "X-Entity-Ref-ID": str(campaign_id),
+        },
         "tracking_settings": {
             "click_tracking": {"enable": True},
             "open_tracking": {"enable": True},
+        },
+        "mail_settings": {
+            "bypass_spam_management": {"enable": False},
         },
         "categories": [str(campaign_id)],
     }
