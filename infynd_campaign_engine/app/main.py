@@ -15,6 +15,7 @@ from app.services.logging_service import configure_logging
 from app.api.auth import router as auth_router
 from app.api.campaigns import router as campaign_router
 from app.api.analytics import router as analytics_router
+from app.api.insights import router as insights_router
 from app.api.tracking import router as tracking_router
 from app.api.websocket import router as ws_router
 from app.api.voice import router as voice_router
@@ -103,6 +104,7 @@ app.include_router(auth_router, prefix=PREFIX)
 app.include_router(tracking_router, prefix=PREFIX)
 app.include_router(campaign_router, prefix=PREFIX)
 app.include_router(analytics_router, prefix=PREFIX)
+app.include_router(insights_router, prefix=PREFIX)
 app.include_router(ws_router, prefix=PREFIX)
 app.include_router(voice_router, prefix=PREFIX)
 

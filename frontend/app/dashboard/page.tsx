@@ -7,6 +7,7 @@ import React, {
   useCallback,
   Fragment,
 } from "react";
+import useSWR from "swr";
 import {
   authLogin,
   authRegister,
@@ -38,6 +39,7 @@ import {
   loadTokens,
   getAccessToken,
   isLoggedIn,
+  swrFetcher,
   type Campaign,
   type CampaignAnalytics,
   type HourlyActivity,
@@ -49,6 +51,9 @@ import {
   type LogEntry,
   type MessageEntry,
   type ProfileResponse,
+  type GlobalInsights,
+  type HistoryInsights,
+  type TrackingInsights,
 } from "@/lib/api";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -979,6 +984,13 @@ function DashboardView({
     refreshCampaigns();
   }
 
+  // SWR live global insights — refreshes every 8 s
+  const { data: gi, isValidating: giValidating } = useSWR<GlobalInsights>(
+    "/insights/global",
+    swrFetcher,
+    { refreshInterval: 8_000 },
+  );
+
   return (
     <div className="view-enter space-y-6">
 
@@ -1047,6 +1059,35 @@ function DashboardView({
           urgent={awaiting > 0}
         />
       </div>
+
+      {/* ── Live Delivery Insights (SWR) ────────────────────────────────── */}
+      {gi && (
+        <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-slate-50 to-white border border-slate-200 shadow-sm px-5 py-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="relative flex h-2 w-2">
+              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${giValidating ? "bg-amber-400" : "bg-emerald-400"}`} />
+              <span className={`relative inline-flex rounded-full h-2 w-2 ${giValidating ? "bg-amber-500" : "bg-emerald-500"}`} />
+            </span>
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Live Delivery Stats</span>
+            <span className="ml-auto text-[10px] text-slate-400">{gi.events_last_24h} events in last 24h</span>
+          </div>
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+            {[
+              { label: "Sent",      value: gi.total_sent,      c: "text-blue-600",    bg: "bg-blue-50",    border: "border-blue-100" },
+              { label: "Delivered", value: gi.total_delivered, c: "text-cyan-600",    bg: "bg-cyan-50",    border: "border-cyan-100"  },
+              { label: "Opened",    value: gi.total_opened,    c: "text-violet-600",  bg: "bg-violet-50",  border: "border-violet-100"},
+              { label: "Clicked",   value: gi.total_clicked,   c: "text-pink-600",    bg: "bg-pink-50",    border: "border-pink-100"  },
+              { label: "Delivery%", value: `${gi.delivery_rate}%`, c: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-100"},
+              { label: "Open%",     value: `${gi.open_rate}%`,     c: "text-indigo-600",  bg: "bg-indigo-50",  border: "border-indigo-100"},
+            ].map((s) => (
+              <div key={s.label} className={`${s.bg} border ${s.border} rounded-xl px-3 py-2.5 text-center`}>
+                <div className="text-[9px] text-slate-400 uppercase tracking-wider mb-0.5">{s.label}</div>
+                <div className={`text-base font-bold tabular-nums font-display ${s.c}`}>{s.value}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── Needs Attention Banner ──────────────────────────────────────── */}
       {awaiting > 0 && (
@@ -2072,29 +2113,19 @@ function AnalyticsView({
   onBack: () => void;
   toast: (msg: string, kind?: Toast["kind"]) => void;
 }) {
-  const [data, setData] = useState<CampaignAnalytics | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  // SWR-powered live analytics — revalidates every 10 s
+  const {
+    data,
+    isLoading: loading,
+    isValidating,
+    mutate: refreshAnalytics,
+  } = useSWR<CampaignAnalytics>(
+    `/campaigns/${campaign.id}/analytics`,
+    swrFetcher,
+    { refreshInterval: 10_000 },
+  );
 
-  const fetchAnalytics = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
-    const { data: d, error } = await getCampaignAnalytics(campaign.id);
-    if (!silent) setLoading(false);
-    if (error) { if (!silent) toast(error, "error"); return; }
-    setData(d);
-    setLastRefresh(new Date());
-  }, [campaign.id]);
-
-  // Initial fetch + auto-poll every 10s
-  useEffect(() => {
-    fetchAnalytics();
-    const iv = setInterval(() => fetchAnalytics(true), 10_000);
-    return () => clearInterval(iv);
-  }, [fetchAnalytics]);
-
-  const ago = lastRefresh
-    ? `Updated ${Math.round((Date.now() - lastRefresh.getTime()) / 1000)}s ago`
-    : "";
+  const lastSyncLabel = isValidating ? "Refreshing…" : data ? "Live" : "";
 
   return (
     <div className="view-enter space-y-6">
@@ -2109,12 +2140,12 @@ function AnalyticsView({
           </div>
         </div>
         <div className="flex items-center gap-3">
-          {lastRefresh && (
-            <span className="text-[11px] text-slate-400">{ago}</span>
+          {lastSyncLabel && (
+            <span className="text-[11px] text-slate-400">{lastSyncLabel}</span>
           )}
           <span className="relative flex h-2.5 w-2.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+            <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isValidating ? "bg-amber-400" : "bg-emerald-400"}`} />
+            <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${isValidating ? "bg-amber-500" : "bg-emerald-500"}`} />
           </span>
           <span className="text-[11px] font-medium text-emerald-600 uppercase tracking-wider">Live</span>
         </div>
@@ -2967,16 +2998,36 @@ function TrackingView({
   );
 
   const [selectedId, setSelectedId] = useState<string>(eligible[0]?.id ?? "");
-  const [events, setEvents] = useState<TrackingEvent[]>([]);
-  const [feedLoading, setFeedLoading] = useState(false);
   const [channelFilter, setChannelFilter] = useState<string>("All");
-  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [showSimulator, setShowSimulator] = useState(false);
   const [secondsElapsed, setSecondsElapsed] = useState(0);
   const [expandedContact, setExpandedContact] = useState<string | null>(null);
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
 
-  // Simulator state
+  // Build SWR key from filter state
+  const eventsKey = selectedId
+    ? `/tracking/events/${selectedId}${channelFilter !== "All" ? `?channel=${channelFilter}&limit=200` : "?limit=200"}`
+    : `/tracking/events?limit=200`;
+
+  // SWR live event feed — revalidates every 8 s
+  const {
+    data: eventsPayload,
+    isLoading: feedLoading,
+    mutate: refreshEvents,
+  } = useSWR<TrackingFeed | TrackingEvent[]>(
+    eventsKey,
+    swrFetcher,
+    {
+      refreshInterval: 8_000,
+      onSuccess: () => setSecondsElapsed(0),
+    },
+  );
+
+  const events: TrackingEvent[] = eventsPayload
+    ? Array.isArray(eventsPayload)
+      ? eventsPayload
+      : (eventsPayload as TrackingFeed).events ?? []
+    : [];
   const [simTab, setSimTab] = useState<"sendgrid" | "call" | "linkedin">("sendgrid");
   const [sgEmail, setSgEmail] = useState("");
   const [sgMsgId, setSgMsgId] = useState("");
@@ -2990,29 +3041,6 @@ function TrackingView({
   const [liEmail, setLiEmail] = useState("");
   const [liEvent, setLiEvent] = useState("ACCEPTED");
   const [liLoading, setLiLoading] = useState(false);
-
-  const fetchEvents = useCallback(async (silent = false) => {
-    if (!silent) setFeedLoading(true);
-    if (selectedId) {
-      const { data, error } = await getTrackingEvents(selectedId, { channel: channelFilter === "All" ? undefined : channelFilter, limit: 200 });
-      if (!silent) setFeedLoading(false);
-      if (error) { if (!silent) toast(error, "error"); return; }
-      setEvents(data?.events ?? []);
-    } else {
-      const { data, error } = await getAllTrackingEvents(200);
-      if (!silent) setFeedLoading(false);
-      if (error) { if (!silent) toast(error, "error"); return; }
-      setEvents(data ?? []);
-    }
-    setLastRefresh(new Date());
-    setSecondsElapsed(0);
-  }, [selectedId, channelFilter]);
-
-  useEffect(() => {
-    fetchEvents();
-    const iv = setInterval(() => fetchEvents(true), 8_000);
-    return () => clearInterval(iv);
-  }, [fetchEvents]);
 
   // Tick "Updated X s ago" every second
   useEffect(() => {
@@ -3053,7 +3081,7 @@ function TrackingView({
     setSgLoading(false);
     if (error) { toast(error, "error"); return; }
     toast("SendGrid event sent!", "success");
-    fetchEvents(true);
+    refreshEvents();
   }
 
   async function sendCall() {
@@ -3063,7 +3091,7 @@ function TrackingView({
     setCallLoading(false);
     if (error) { toast(error, "error"); return; }
     toast("Call event recorded!", "success");
-    fetchEvents(true);
+    refreshEvents();
   }
 
   async function sendLinkedIn() {
@@ -3073,7 +3101,7 @@ function TrackingView({
     setLiLoading(false);
     if (error) { toast(error, "error"); return; }
     toast("LinkedIn event recorded!", "success");
-    fetchEvents(true);
+    refreshEvents();
   }
 
   const selectedCamp = eligible.find((c) => c.id === selectedId) ?? null;
@@ -3084,7 +3112,7 @@ function TrackingView({
       {/* ── HERO HEADER ── */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-white via-slate-50 to-slate-100 border border-slate-200 shadow-sm p-6 pb-5">
         {/* Decorative mesh */}
-        <div className="absolute inset-0 opacity-[0.35]" style={{ backgroundImage: "radial-gradient(circle at 15% 50%, #bfdbfe 0%, transparent 50%), radial-gradient(circle at 85% 15%, #ddd6fe 0%, transparent 50%), radial-gradient(circle at 60% 90%, #a7f3d0 0%, transparent 45%)" }} />
+        <div className="absolute inset-0 opacity-[0.35]" style={{ backgroundImage: "radial-gradient(circle at 25% 40%, #6366f1 0%, transparent 50%), radial-gradient(circle at 75% 25%, #8b5cf6 0%, transparent 50%), radial-gradient(circle at 50% 80%, #06b6d4 0%, transparent 50%)" }} />
         <div className="relative flex items-start justify-between">
           <div>
             <div className="flex items-center gap-3 mb-1">
@@ -3576,31 +3604,33 @@ function HistoryView({
 }) {
   const [selectedId, setSelectedId] = useState<string>(campaigns[0]?.id ?? "");
   const [tab, setTab] = useState<"logs" | "messages">("logs");
-  const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [messages, setMessages] = useState<MessageEntry[]>([]);
-  const [loading, setLoading] = useState(false);
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
   const [expandedContact, setExpandedContact] = useState<string | null>(null);
   const [expandedMsgId, setExpandedMsgId] = useState<string | null>(null);
   const [campSearch, setCampSearch] = useState("");
 
-  useEffect(() => {
-    if (!selectedId) return;
-    setLoading(true);
-    (async () => {
-      if (tab === "logs") {
-        const { data, error } = await getCampaignLogs(selectedId);
-        setLoading(false);
-        if (error) { toast(error, "error"); return; }
-        setLogs(data ?? []);
-      } else {
-        const { data, error } = await getCampaignMessages(selectedId);
-        setLoading(false);
-        if (error) { toast(error, "error"); return; }
-        setMessages(data ?? []);
-      }
-    })();
-  }, [selectedId, tab]);
+  // SWR live-polling — logs & messages both refresh every 8 s
+  const {
+    data: logsRaw,
+    isLoading: logsLoading,
+  } = useSWR<LogEntry[]>(
+    selectedId ? `/campaigns/${selectedId}/logs` : null,
+    swrFetcher,
+    { refreshInterval: 8_000 },
+  );
+
+  const {
+    data: messagesRaw,
+    isLoading: msgsLoading,
+  } = useSWR<MessageEntry[]>(
+    selectedId ? `/campaigns/${selectedId}/messages` : null,
+    swrFetcher,
+    { refreshInterval: 8_000 },
+  );
+
+  const logs: LogEntry[] = logsRaw ?? [];
+  const messages: MessageEntry[] = messagesRaw ?? [];
+  const loading = tab === "logs" ? logsLoading : msgsLoading;
 
   const LOG_STATUS_META: Record<string, { icon: string; color: string; bg: string; ring: string; dot: string }> = {
     SUCCESS:     { icon: "M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z",       color: "text-emerald-500", bg: "bg-emerald-50",  ring: "ring-emerald-200", dot: "bg-emerald-400" },
@@ -3672,35 +3702,35 @@ function HistoryView({
     <div className="view-enter space-y-5">
 
       {/* ── HERO HEADER ── */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900 p-6 pb-5">
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-white via-slate-50 to-slate-100 border border-slate-200 shadow-sm p-6 pb-5">
         {/* Decorative mesh */}
-        <div className="absolute inset-0 opacity-[0.07]" style={{ backgroundImage: "radial-gradient(circle at 25% 40%, #6366f1 0%, transparent 50%), radial-gradient(circle at 75% 25%, #8b5cf6 0%, transparent 50%), radial-gradient(circle at 50% 80%, #06b6d4 0%, transparent 50%)" }} />
+        <div className="absolute inset-0 opacity-[0.35]" style={{ backgroundImage: "radial-gradient(circle at 25% 40%, #6366f1 0%, transparent 50%), radial-gradient(circle at 75% 25%, #8b5cf6 0%, transparent 50%), radial-gradient(circle at 50% 80%, #06b6d4 0%, transparent 50%)" }} />
         <div className="relative flex items-start justify-between">
           <div>
             <div className="flex items-center gap-3 mb-1">
-              <h2 className="text-2xl font-extrabold text-white tracking-tight font-display">Campaign History</h2>
-              <div className="flex items-center gap-1.5 bg-indigo-500/20 backdrop-blur-sm border border-indigo-400/30 rounded-full px-3 py-1">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" width={12} height={12} className="text-indigo-300">
+              <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight font-display">Campaign History</h2>
+              <div className="flex items-center gap-1.5 bg-indigo-500/10 backdrop-blur-sm border border-indigo-400/40 rounded-full px-3 py-1">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" width={12} height={12} className="text-indigo-500">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
                 </svg>
-                <span className="text-[10px] font-bold text-indigo-300 uppercase tracking-widest">{campaigns.length} Campaigns</span>
+                <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">{campaigns.length} Campaigns</span>
               </div>
             </div>
-            <p className="text-indigo-200/60 text-sm">Explore execution logs, sent messages &amp; delivery status across all campaigns</p>
+            <p className="text-slate-500 text-sm">Explore execution logs, sent messages &amp; delivery status across all campaigns</p>
           </div>
           <div className="flex items-center gap-2">
             {selectedCamp && (
               <>
                 <button
                   onClick={() => onSelect(selectedCamp)}
-                  className="text-xs px-4 py-2 rounded-xl font-medium transition-all backdrop-blur-sm border bg-white/10 border-white/10 text-indigo-200 hover:bg-white/20"
+                  className="text-xs px-4 py-2 rounded-xl font-medium transition-all border bg-white border-slate-300 text-slate-600 hover:bg-slate-50 hover:border-slate-400 shadow-sm"
                 >
                   View Details
                 </button>
                 {selectedCamp.pipeline_state === "AWAITING_APPROVAL" && (
                   <button
                     onClick={() => onApproval(selectedCamp)}
-                    className="text-xs px-4 py-2 rounded-xl font-medium transition-all backdrop-blur-sm border bg-amber-500/20 border-amber-400/30 text-amber-200 hover:bg-amber-500/30"
+                    className="text-xs px-4 py-2 rounded-xl font-medium transition-all border bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100 shadow-sm"
                   >
                     Review Approval
                   </button>
@@ -3713,16 +3743,16 @@ function HistoryView({
         {/* ── STATS RIBBON ── */}
         <div className="relative grid grid-cols-4 lg:grid-cols-7 gap-3 mt-5">
           {[
-            { label: "Total Logs",  value: logStats.total,   c: "text-white" },
-            { label: "Successful",  value: logStats.success, c: "text-emerald-300" },
-            { label: "Failed",      value: logStats.failed,  c: "text-red-300" },
-            { label: "Messages",    value: msgStats.total,   c: "text-white" },
-            { label: "Email",       value: msgStats.email,   c: "text-blue-300" },
-            { label: "Calls",       value: msgStats.call,    c: "text-indigo-300" },
-            { label: "LinkedIn",    value: msgStats.linkedin, c: "text-cyan-300" },
+            { label: "Total Logs",  value: logStats.total,    bg: "bg-white/70",      border: "border-slate-200",   c: "text-slate-800",   lc: "text-slate-400/80"  },
+            { label: "Successful",  value: logStats.success,  bg: "bg-emerald-50/80", border: "border-emerald-200", c: "text-emerald-600", lc: "text-emerald-500/70"},
+            { label: "Failed",      value: logStats.failed,   bg: "bg-red-50/80",     border: "border-red-200",     c: "text-red-600",     lc: "text-red-500/70"    },
+            { label: "Messages",    value: msgStats.total,    bg: "bg-white/70",      border: "border-slate-200",   c: "text-slate-800",   lc: "text-slate-400/80"  },
+            { label: "Email",       value: msgStats.email,    bg: "bg-blue-50/80",    border: "border-blue-200",    c: "text-blue-600",    lc: "text-blue-500/70"   },
+            { label: "Calls",       value: msgStats.call,     bg: "bg-indigo-50/80",  border: "border-indigo-200",  c: "text-indigo-600",  lc: "text-indigo-500/70" },
+            { label: "LinkedIn",    value: msgStats.linkedin, bg: "bg-cyan-50/80",    border: "border-cyan-200",    c: "text-cyan-600",    lc: "text-cyan-500/70"   },
           ].map((s) => (
-            <div key={s.label} className="bg-white/[0.06] backdrop-blur-sm rounded-xl px-3 py-2.5 border border-white/[0.06]">
-              <div className="text-[10px] text-indigo-200/40 uppercase tracking-wider mb-0.5">{s.label}</div>
+            <div key={s.label} className={`${s.bg} backdrop-blur-sm rounded-xl px-3 py-2.5 border ${s.border} shadow-sm hover:shadow-md hover:scale-[1.02] transition-all duration-200`}>
+              <div className={`text-[10px] ${s.lc} uppercase tracking-wider mb-0.5`}>{s.label}</div>
               <div className={`text-lg font-bold font-display tabular-nums ${s.c}`}>{s.value}</div>
             </div>
           ))}

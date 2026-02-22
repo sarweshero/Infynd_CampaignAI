@@ -1461,6 +1461,13 @@ video {
   --tw-border-opacity: 1;
   border-color: rgb(52 211 153 / var(--tw-border-opacity, 1));
 }
+.border-indigo-400\/40 {
+  border-color: rgb(129 140 248 / 0.4);
+}
+.border-pink-100 {
+  --tw-border-opacity: 1;
+  border-color: rgb(252 231 243 / var(--tw-border-opacity, 1));
+}
 .bg-\[\#0f172a\] {
   --tw-bg-opacity: 1;
   background-color: rgb(15 23 42 / var(--tw-bg-opacity, 1));
@@ -1732,6 +1739,13 @@ video {
 }
 .bg-slate-200\/80 {
   background-color: rgb(226 232 240 / 0.8);
+}
+.bg-indigo-500\/10 {
+  background-color: rgb(99 102 241 / 0.1);
+}
+.bg-amber-400 {
+  --tw-bg-opacity: 1;
+  background-color: rgb(251 191 36 / var(--tw-bg-opacity, 1));
 }
 .bg-gradient-to-b {
   background-image: linear-gradient(to bottom, var(--tw-gradient-stops));
@@ -2477,6 +2491,9 @@ video {
 }
 .text-violet-500\/70 {
   color: rgb(139 92 246 / 0.7);
+}
+.text-slate-400\/80 {
+  color: rgb(148 163 184 / 0.8);
 }
 .antialiased {
   -webkit-font-smoothing: antialiased;
@@ -4628,6 +4645,10 @@ button, a, input, select, textarea {
   --tw-border-opacity: 1;
   border-color: rgb(226 232 240 / var(--tw-border-opacity, 1));
 }
+.hover\:border-slate-400:hover {
+  --tw-border-opacity: 1;
+  border-color: rgb(148 163 184 / var(--tw-border-opacity, 1));
+}
 .hover\:bg-blue-50:hover {
   --tw-bg-opacity: 1;
   background-color: rgb(239 246 255 / var(--tw-bg-opacity, 1));
@@ -4670,6 +4691,10 @@ button, a, input, select, textarea {
 }
 .hover\:bg-white\/60:hover {
   background-color: rgb(255 255 255 / 0.6);
+}
+.hover\:bg-amber-100:hover {
+  --tw-bg-opacity: 1;
+  background-color: rgb(254 243 199 / var(--tw-bg-opacity, 1));
 }
 .hover\:text-blue-500:hover {
   --tw-text-opacity: 1;
@@ -4752,6 +4777,10 @@ button, a, input, select, textarea {
 
   .sm\:grid-cols-4 {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .sm\:grid-cols-6 {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 }
 @media (min-width: 768px) {
