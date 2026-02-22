@@ -33,6 +33,51 @@ export function clearTokens() {
 export function getAccessToken() { return _accessToken; }
 export function isLoggedIn()     { return !!_accessToken; }
 
+// ── Token refresh mutex ───────────────────────────────────────────────────────
+// At most one refresh call in-flight at a time; all concurrent 401s wait on the
+// same promise and then retry with the new token instead of racing to refresh.
+let _refreshPromise: Promise<boolean> | null = null;
+
+async function doRefresh(): Promise<boolean> {
+  if (!_refreshToken) return false;
+
+  // Reuse an in-flight refresh so concurrent 401s don't race
+  if (_refreshPromise) return _refreshPromise;
+
+  _refreshPromise = (async (): Promise<boolean> => {
+    try {
+      const res = await fetch(`${API_BASE}/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: _refreshToken }),
+      });
+      if (!res.ok) return false;
+      const data = (await res.json()) as {
+        access_token?: string;
+        refresh_token?: string;
+      };
+      if (!data.access_token) return false;
+      // Store both tokens — the backend rotates the refresh token too
+      setTokens(data.access_token, data.refresh_token ?? _refreshToken);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      _refreshPromise = null;
+    }
+  })();
+
+  return _refreshPromise;
+}
+
+/** Dispatch a browser event so the UI can react (e.g. force logout). */
+function signalUnauthorized() {
+  clearTokens();
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("infynd:unauthorized"));
+  }
+}
+
 // ── core fetch wrapper ────────────────────────────────────────────────────────
 interface ApiOpts {
   method?: string;
@@ -77,18 +122,16 @@ export async function apiFetch<T = unknown>(
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
 
-    // Auto-refresh on 401
+    // ── 401 → try token refresh, then retry once ─────────────────────
     if (res.status === 401 && _refreshToken && path !== "/auth/refresh") {
-      const refreshed = await apiFetch<{ access_token: string }>("/auth/refresh", {
-        method: "POST",
-        body:   { refresh_token: _refreshToken },
-        auth:   false,
-      });
-      if (refreshed.data?.access_token) {
-        _accessToken = refreshed.data.access_token;
-        setTokens(_accessToken, _refreshToken);
-        return apiFetch<T>(path, opts); // retry once
+      const refreshed = await doRefresh();
+      if (refreshed) {
+        // Retry the original request with the new access token
+        return apiFetch<T>(path, opts);
       }
+      // Refresh token itself is invalid/expired — force sign-out
+      signalUnauthorized();
+      return { data: null, error: "Session expired. Please sign in again.", status: 401 };
     }
 
     let data: T | null = null;
@@ -134,15 +177,12 @@ export async function fetchCallTemplateAudio(
     let res = await execute();
 
     if (res.status === 401 && _refreshToken) {
-      const refreshed = await apiFetch<{ access_token: string }>("/auth/refresh", {
-        method: "POST",
-        body: { refresh_token: _refreshToken },
-        auth: false,
-      });
-      if (refreshed.data?.access_token) {
-        _accessToken = refreshed.data.access_token;
-        setTokens(_accessToken, _refreshToken);
+      const ok = await doRefresh();
+      if (ok) {
         res = await execute(_accessToken);
+      } else {
+        signalUnauthorized();
+        return { data: null, error: "Session expired. Please sign in again.", status: 401 };
       }
     }
 
@@ -184,15 +224,12 @@ export async function fetchCallTemplateVoices(
     let res = await execute();
 
     if (res.status === 401 && _refreshToken) {
-      const refreshed = await apiFetch<{ access_token: string }>("/auth/refresh", {
-        method: "POST",
-        body: { refresh_token: _refreshToken },
-        auth: false,
-      });
-      if (refreshed.data?.access_token) {
-        _accessToken = refreshed.data.access_token;
-        setTokens(_accessToken, _refreshToken);
+      const ok = await doRefresh();
+      if (ok) {
         res = await execute(_accessToken);
+      } else {
+        signalUnauthorized();
+        return { data: null, error: "Session expired. Please sign in again.", status: 401 };
       }
     }
 
@@ -325,6 +362,8 @@ export interface MessageEntry {
   send_status:          string;
   provider_message_id?: string;
   sent_at?:             string;
+  latest_event?:        string;
+  event_payload?:       Record<string, unknown>;
 }
 
 /** POST /campaigns/ */
@@ -387,22 +426,46 @@ export const getCampaignMessages = (id: string) =>
 export interface ChannelBreakdown {
   channel:          string;
   sent:             number;
+  delivered:        number;
   opened:           number;
   clicked:          number;
   answered:         number;
+  bounced:          number;
+  busy:             number;
+  no_answer:        number;
   conversion_count: number;
 }
+export interface HourlyActivity {
+  hour:  string;   // ISO datetime string (UTC)
+  count: number;
+}
+export interface TopContact {
+  email:             string;
+  events:            number;
+  latest_event_type: string | null;
+}
 export interface CampaignAnalytics {
-  campaign_id:          string;
-  total_contacts:       number;
-  sent:                 number;
-  opened:               number;
-  clicked:              number;
-  answered:             number;
-  open_rate:            number;
-  click_rate:           number;
-  conversion_rate:      number;
-  breakdown_by_channel: ChannelBreakdown[];
+  campaign_id:              string;
+  total_contacts:           number;
+  sent:                     number;
+  delivered:                number;
+  opened:                   number;
+  clicked:                  number;
+  answered:                 number;
+  bounced:                  number;
+  busy:                     number;
+  no_answer:                number;
+  open_rate:                number;
+  click_rate:               number;
+  conversion_rate:          number;
+  delivery_rate:            number;
+  answer_rate:              number;
+  reach_rate:               number;
+  click_to_open_rate:       number;
+  avg_call_duration_seconds: number;
+  hourly_activity:          HourlyActivity[];
+  top_engaged_contacts:     TopContact[];
+  breakdown_by_channel:     ChannelBreakdown[];
 }
 
 /** GET /campaigns/{id}/analytics */
@@ -445,6 +508,37 @@ export const linkedinTracking = (payload: {
     body:   payload,
     auth:   false,
   });
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  ❹b  TRACKING EVENT FEED  (live data)
+// ─────────────────────────────────────────────────────────────────────────────
+export interface TrackingEvent {
+  id:            string;
+  campaign_id:   string;
+  contact_email: string;
+  channel:       string;
+  event_type:    string;
+  occurred_at:   string;
+  payload?:      Record<string, unknown>;
+}
+export interface TrackingFeed {
+  campaign_id: string;
+  events:      TrackingEvent[];
+  total:       number;
+}
+
+/** GET /tracking/events/{campaign_id} */
+export const getTrackingEvents = (campaignId: string, opts?: { limit?: number; channel?: string }) => {
+  const params = new URLSearchParams();
+  if (opts?.limit) params.set("limit", String(opts.limit));
+  if (opts?.channel) params.set("channel", opts.channel);
+  const qs = params.toString();
+  return apiFetch<TrackingFeed>(`/tracking/events/${campaignId}${qs ? `?${qs}` : ""}`);
+};
+
+/** GET /tracking/events  (all campaigns) */
+export const getAllTrackingEvents = (limit = 50) =>
+  apiFetch<TrackingEvent[]>(`/tracking/events?limit=${limit}`);
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  ❺  WEBSOCKET  (WS /ws/campaigns/{id}?token=...)

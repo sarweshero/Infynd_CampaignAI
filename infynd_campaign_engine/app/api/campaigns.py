@@ -147,13 +147,49 @@ async def get_campaign_messages(
     db: AsyncSession = Depends(get_db),
     current_user: TokenData = Depends(get_current_user),
 ):
-    """Return outbound messages and their send/tracking status."""
+    """Return outbound messages enriched with latest engagement event (call outcome, etc.)."""
     result = await db.execute(
         select(OutboundMessage)
         .where(OutboundMessage.campaign_id == campaign_id)
         .order_by(OutboundMessage.sent_at.asc().nullslast())
     )
-    return result.scalars().all()
+    messages = result.scalars().all()
+
+    # For each message, fetch the latest (most recent) engagement event
+    enriched: list[dict] = []
+    for msg in messages:
+        latest_event = None
+        event_payload = None
+
+        # Query engagement_history for the latest non-SENT event
+        eh_result = await db.execute(
+            select(EngagementHistory)
+            .where(
+                EngagementHistory.campaign_id == msg.campaign_id,
+                EngagementHistory.contact_email == msg.contact_email,
+                EngagementHistory.channel == msg.channel,
+                EngagementHistory.event_type != "SENT",
+            )
+            .order_by(EngagementHistory.occurred_at.desc())
+            .limit(1)
+        )
+        eh = eh_result.scalar_one_or_none()
+        if eh:
+            latest_event = eh.event_type
+            event_payload = eh.payload if isinstance(eh.payload, dict) else None
+
+        enriched.append(MessageEntry(
+            id=msg.id,
+            contact_email=msg.contact_email,
+            channel=msg.channel,
+            send_status=msg.send_status,
+            provider_message_id=msg.provider_message_id,
+            sent_at=msg.sent_at,
+            latest_event=latest_event,
+            event_payload=event_payload,
+        ))
+
+    return enriched
 
 
 @router.patch("/{campaign_id}/content/{contact_email}")

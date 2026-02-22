@@ -1,9 +1,8 @@
 """
 SendGrid Service — sends emails via SendGrid API.
-Validates webhook HMAC signature.
+Validates webhook ECDSA signature (Event Webhook v3).
 """
 import hashlib
-import hmac
 import base64
 import logging
 from typing import Optional
@@ -73,12 +72,34 @@ def verify_sendgrid_signature(
     signature: str,
     timestamp: str,
 ) -> bool:
-    """Verify SendGrid Event Webhook signature (HMAC-SHA256)."""
+    """
+    Verify SendGrid Event Webhook v3 ECDSA signature.
+    The SENDGRID_WEBHOOK_SECRET is a PEM-encoded ECDSA public key (base64).
+    """
     if not settings.SENDGRID_WEBHOOK_SECRET:
         return True  # Bypass if not configured
 
-    signed_payload = (timestamp + payload.decode("utf-8")).encode("utf-8")
-    secret = base64.b64decode(settings.SENDGRID_WEBHOOK_SECRET)
-    computed = hmac.new(secret, signed_payload, hashlib.sha256).digest()
-    computed_b64 = base64.b64encode(computed).decode("utf-8")
-    return hmac.compare_digest(computed_b64, signature)
+    try:
+        from cryptography.hazmat.primitives.asymmetric.ec import ECDSA
+        from cryptography.hazmat.primitives.hashes import SHA256
+        from cryptography.hazmat.primitives.serialization import load_der_public_key
+
+        # The signed content is timestamp + payload
+        signed_payload = timestamp.encode("utf-8") + payload
+
+        # Decode the DER public key from base64
+        public_key_der = base64.b64decode(settings.SENDGRID_WEBHOOK_SECRET)
+        public_key = load_der_public_key(public_key_der)
+
+        # Decode the signature from base64
+        sig_bytes = base64.b64decode(signature)
+
+        # Verify
+        public_key.verify(sig_bytes, signed_payload, ECDSA(SHA256()))
+        return True
+    except ImportError:
+        logger.warning("[SendGrid] cryptography package not installed — skipping signature verification")
+        return True
+    except Exception as exc:
+        logger.warning(f"[SendGrid] Signature verification failed: {exc}")
+        return False

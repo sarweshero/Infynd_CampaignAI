@@ -73,6 +73,8 @@ class MessageEntry(BaseModel):
     send_status:         str
     provider_message_id: Optional[str]
     sent_at:             Optional[datetime]
+    latest_event:        Optional[str] = None
+    event_payload:       Optional[dict] = None
 
     class Config:
         from_attributes = True

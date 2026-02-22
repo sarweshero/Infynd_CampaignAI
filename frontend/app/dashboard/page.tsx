@@ -27,6 +27,8 @@ import {
   getCampaignAnalytics,
   getCampaignLogs,
   getCampaignMessages,
+  getTrackingEvents,
+  getAllTrackingEvents,
   sendgridWebhook,
   callTracking,
   linkedinTracking,
@@ -38,6 +40,10 @@ import {
   isLoggedIn,
   type Campaign,
   type CampaignAnalytics,
+  type HourlyActivity,
+  type TopContact,
+  type TrackingEvent,
+  type TrackingFeed,
   type WsMessage,
   type WsAction,
   type LogEntry,
@@ -104,15 +110,31 @@ function stepDone(current: string, step: string) {
   return si <= ci;
 }
 
+// Ensure bare ISO strings (no Z/offset) are treated as UTC so local-time display is correct
+function asUTC(iso: string): string {
+  if (!iso || typeof iso !== "string") return iso;
+  // Already has timezone info
+  if (/[Zz]$/.test(iso) || /[+-]\d{2}:\d{2}$/.test(iso) || /[+-]\d{4}$/.test(iso)) return iso;
+  return iso + "Z";
+}
+
 function fmt(iso: string) {
   if (!iso || typeof iso !== "string") return "—";
-  const d = new Date(iso);
+  const d = new Date(asUTC(iso));
   if (isNaN(d.getTime())) return "—";
   const pad = (n: number) => String(n).padStart(2, "0");
   return (
     `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
     `${pad(d.getHours())}:${pad(d.getMinutes())}`
   );
+}
+
+function fmtDuration(seconds: number): string {
+  if (!seconds || seconds <= 0) return "—";
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  const m = Math.floor(seconds / 60);
+  const s = Math.round(seconds % 60);
+  return s > 0 ? `${m}m ${s}s` : `${m}m`;
 }
 
 function pct(num: number, total: number) {
@@ -2052,25 +2074,49 @@ function AnalyticsView({
 }) {
   const [data, setData] = useState<CampaignAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
 
-  useEffect(() => {
-    (async () => {
-      const { data: d, error } = await getCampaignAnalytics(campaign.id);
-      setLoading(false);
-      if (error) { toast(error, "error"); return; }
-      setData(d);
-    })();
+  const fetchAnalytics = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    const { data: d, error } = await getCampaignAnalytics(campaign.id);
+    if (!silent) setLoading(false);
+    if (error) { if (!silent) toast(error, "error"); return; }
+    setData(d);
+    setLastRefresh(new Date());
   }, [campaign.id]);
+
+  // Initial fetch + auto-poll every 10s
+  useEffect(() => {
+    fetchAnalytics();
+    const iv = setInterval(() => fetchAnalytics(true), 10_000);
+    return () => clearInterval(iv);
+  }, [fetchAnalytics]);
+
+  const ago = lastRefresh
+    ? `Updated ${Math.round((Date.now() - lastRefresh.getTime()) / 1000)}s ago`
+    : "";
 
   return (
     <div className="view-enter space-y-6">
-      <div className="flex items-center gap-3">
-        <button onClick={onBack} className="text-slate-400 hover:text-blue-600 text-sm transition-colors">
-          ← Back
-        </button>
-        <div>
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight font-display">Analytics</h2>
-          <p className="text-slate-500 text-sm truncate">{campaign.name}</p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <button onClick={onBack} className="text-slate-400 hover:text-blue-600 text-sm transition-colors">
+            ← Back
+          </button>
+          <div>
+            <h2 className="text-xl font-bold text-slate-900 tracking-tight font-display">Analytics</h2>
+            <p className="text-slate-500 text-sm truncate">{campaign.name}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          {lastRefresh && (
+            <span className="text-[11px] text-slate-400">{ago}</span>
+          )}
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+          </span>
+          <span className="text-[11px] font-medium text-emerald-600 uppercase tracking-wider">Live</span>
         </div>
       </div>
 
@@ -2086,41 +2132,252 @@ function AnalyticsView({
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-4 stagger-children">
-            <Metric label="Total Contacts" value={data.total_contacts} />
+          {/* ── Volume metrics strip ────────────────────────────── */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 stagger-children">
+            <Metric label="Total" value={data.total_contacts} />
             <Metric label="Sent" value={data.sent} accent="text-blue-600" />
-            <Metric label="Opened" value={data.opened} sub={`${data.open_rate}%`} accent="text-violet-600" />
-            <Metric label="Clicked" value={data.clicked} sub={`${data.click_rate}%`} accent="text-pink-600" />
-            <Metric label="Answered" value={data.answered} />
-            <Metric label="Conversions" value={`${data.conversion_rate}%`} accent="text-emerald-600" />
-            <Metric label="Delivery Rate" value={`${pct(data.sent, data.total_contacts)}%`} accent="text-blue-600" />
+            <Metric label="Delivered" value={data.delivered} accent="text-cyan-600" />
+            <Metric label="Opened" value={data.opened} accent="text-violet-600" />
+            <Metric label="Clicked" value={data.clicked} accent="text-pink-600" />
+            <Metric label="Answered" value={data.answered} accent="text-emerald-600" />
+            <Metric label="Bounced" value={data.bounced} accent="text-red-500" />
+            <Metric label="Busy / No Ans" value={`${data.busy} / ${data.no_answer}`} accent="text-amber-600" />
           </div>
 
-          <div className="card p-6 space-y-5 w-full">
-            <h3 className="font-semibold text-slate-800 text-sm">Engagement Funnel</h3>
-            <Bar label="Sent" value={data.sent} max={data.total_contacts} color="bg-blue-500" />
-            <Bar label="Opened" value={data.opened} max={data.sent || 1} color="bg-violet-500" />
-            <Bar label="Clicked" value={data.clicked} max={data.opened || 1} color="bg-pink-500" />
+          {/* ── Performance Scorecard ───────────────────────────── */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {([
+              {
+                label: "Reach Rate",
+                value: `${data.reach_rate}%`,
+                sub: "contacts successfully reached",
+                icon: "◎",
+                color: "from-blue-50 to-cyan-50 border-blue-100",
+                vcolor: "text-blue-600",
+              },
+              {
+                label: "Answer Rate",
+                value: `${data.answer_rate}%`,
+                sub: "of calls that connected",
+                icon: "📞",
+                color: "from-emerald-50 to-green-50 border-emerald-100",
+                vcolor: "text-emerald-600",
+              },
+              {
+                label: "Click-to-Open",
+                value: `${data.click_to_open_rate}%`,
+                sub: "of openers who clicked",
+                icon: "✦",
+                color: "from-violet-50 to-purple-50 border-violet-100",
+                vcolor: "text-violet-600",
+              },
+              {
+                label: "Avg Talk Time",
+                value: fmtDuration(data.avg_call_duration_seconds),
+                sub: "per answered call",
+                icon: "⏱",
+                color: "from-indigo-50 to-blue-50 border-indigo-100",
+                vcolor: "text-indigo-600",
+              },
+            ] as const).map((kpi) => (
+              <div key={kpi.label} className={`card bg-gradient-to-br ${kpi.color} p-5 flex flex-col gap-2`}>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{kpi.label}</span>
+                  <span className="text-lg">{kpi.icon}</span>
+                </div>
+                <div className={`text-3xl font-bold tabular-nums ${kpi.vcolor}`}>{kpi.value}</div>
+                <div className="text-[11px] text-slate-400">{kpi.sub}</div>
+              </div>
+            ))}
           </div>
 
+          {/* ── Conversion + delivery rates ─────────────────────── */}
+          <div className="grid grid-cols-3 gap-4">
+            <div className="card p-4 text-center">
+              <div className="text-2xl font-bold text-cyan-600 tabular-nums">{data.delivery_rate}%</div>
+              <div className="text-xs text-slate-500 mt-1">Delivery Rate</div>
+              <div className="text-[10px] text-slate-400">delivered / sent</div>
+            </div>
+            <div className="card p-4 text-center">
+              <div className="text-2xl font-bold text-violet-600 tabular-nums">{data.open_rate}%</div>
+              <div className="text-xs text-slate-500 mt-1">Open Rate</div>
+              <div className="text-[10px] text-slate-400">opened / sent</div>
+            </div>
+            <div className="card p-4 text-center">
+              <div className="text-2xl font-bold text-pink-600 tabular-nums">{data.click_rate}%</div>
+              <div className="text-xs text-slate-500 mt-1">Click Rate</div>
+              <div className="text-[10px] text-slate-400">clicked / sent</div>
+            </div>
+          </div>
+
+          {/* ── Dual Funnels: Email + Call ────────────────────────── */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="card p-6 space-y-4">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-blue-500" />
+                <h3 className="font-semibold text-slate-800 text-sm">Email Funnel</h3>
+              </div>
+              {(() => {
+                const b = data.breakdown_by_channel?.find((c) => c.channel === "Email");
+                if (!b) return <p className="text-slate-400 text-xs py-4">No email data</p>;
+                return (
+                  <>
+                    <Bar label="Sent" value={b.sent} max={data.total_contacts} color="bg-blue-500" />
+                    <Bar label="Delivered" value={b.delivered} max={b.sent || 1} color="bg-cyan-500" />
+                    <Bar label="Opened" value={b.opened} max={b.delivered || 1} color="bg-violet-500" />
+                    <Bar label="Clicked" value={b.clicked} max={b.opened || 1} color="bg-pink-500" />
+                    <Bar label="Bounced" value={b.bounced} max={b.sent || 1} color="bg-red-400" />
+                  </>
+                );
+              })()}
+            </div>
+            <div className="card p-6 space-y-4">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-indigo-500" />
+                <h3 className="font-semibold text-slate-800 text-sm">Call Funnel</h3>
+              </div>
+              {(() => {
+                const b = data.breakdown_by_channel?.find((c) => c.channel === "Call");
+                if (!b) return <p className="text-slate-400 text-xs py-4">No call data</p>;
+                return (
+                  <>
+                    <Bar label="Dialed" value={b.sent} max={data.total_contacts} color="bg-blue-500" />
+                    <Bar label="Answered" value={b.answered} max={b.sent || 1} color="bg-emerald-500" />
+                    <Bar label="Busy" value={b.busy} max={b.sent || 1} color="bg-amber-500" />
+                    <Bar label="No Answer" value={b.no_answer} max={b.sent || 1} color="bg-orange-400" />
+                    <Bar label="Failed" value={b.bounced} max={b.sent || 1} color="bg-red-400" />
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+
+          {/* ── Activity Timeline (hourly sparkline) ─────────────── */}
+          {data.hourly_activity?.length > 0 && (() => {
+            const max = Math.max(...data.hourly_activity.map((h) => h.count), 1);
+            const BAR_W = 28;
+            const GAP = 5;
+            const CHART_H = 72;
+            return (
+              <div className="card p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold text-slate-800 text-sm">Activity Timeline</h3>
+                  <span className="text-[11px] text-slate-400">
+                    {data.hourly_activity.reduce((s, h) => s + h.count, 0)} engagement events · local time
+                  </span>
+                </div>
+                <div className="overflow-x-auto pb-1">
+                  <svg
+                    width={data.hourly_activity.length * (BAR_W + GAP)}
+                    height={CHART_H + 30}
+                    className="overflow-visible"
+                  >
+                    {data.hourly_activity.map((h, i) => {
+                      const barH = Math.max(6, Math.round((h.count / max) * CHART_H));
+                      const x = i * (BAR_W + GAP);
+                      const y = CHART_H - barH;
+                      const localHr = new Date(asUTC(h.hour)).getHours();
+                      const ampm = localHr >= 12 ? "pm" : "am";
+                      const hr12 = localHr % 12 || 12;
+                      return (
+                        <g key={h.hour}>
+                          <rect
+                            x={x} y={y} width={BAR_W} height={barH} rx={4}
+                            fill={h.count === max ? "#3b82f6" : "#bfdbfe"}
+                            className="transition-colors hover:opacity-80"
+                          />
+                          <text x={x + BAR_W / 2} y={CHART_H + 14} textAnchor="middle" fontSize={9} fill="#94a3b8">
+                            {`${hr12}${ampm}`}
+                          </text>
+                          {h.count > 0 && (
+                            <text x={x + BAR_W / 2} y={y - 4} textAnchor="middle" fontSize={9} fill="#475569" fontWeight="600">
+                              {h.count}
+                            </text>
+                          )}
+                        </g>
+                      );
+                    })}
+                  </svg>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1">Peak engagement: {fmtDuration(0) === "—" ? "—" : new Date(asUTC(data.hourly_activity.reduce((best, h) => h.count > best.count ? h : best, data.hourly_activity[0]).hour)).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p>
+              </div>
+            );
+          })()}
+
+          {/* ── Top Engaged Contacts (follow-up priority list) ───── */}
+          {data.top_engaged_contacts?.length > 0 && (
+            <div className="card overflow-hidden">
+              <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold text-slate-800 text-sm">Top Engaged Contacts</h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Priority list for follow-up · ranked by engagement events</p>
+                </div>
+                <span className="text-[11px] bg-blue-50 text-blue-600 border border-blue-100 px-2 py-1 rounded-full font-medium">
+                  {data.top_engaged_contacts.length} contacts
+                </span>
+              </div>
+              <div className="divide-y divide-slate-50">
+                {data.top_engaged_contacts.map((c, idx) => {
+                  const EVT_COLORS: Record<string, string> = {
+                    ANSWERED:  "bg-emerald-50 text-emerald-700 border-emerald-200",
+                    DELIVERED: "bg-cyan-50 text-cyan-700 border-cyan-200",
+                    OPENED:    "bg-violet-50 text-violet-700 border-violet-200",
+                    CLICKED:   "bg-pink-50 text-pink-700 border-pink-200",
+                    BUSY:      "bg-amber-50 text-amber-700 border-amber-200",
+                    NO_ANSWER: "bg-orange-50 text-orange-700 border-orange-200",
+                    BOUNCED:   "bg-red-50 text-red-700 border-red-200",
+                    FAILED:    "bg-red-50 text-red-700 border-red-200",
+                  };
+                  const evtStyle = c.latest_event_type ? (EVT_COLORS[c.latest_event_type] ?? "bg-slate-100 text-slate-500 border-slate-200") : "";
+                  return (
+                    <div key={c.email} className="px-5 py-3.5 flex items-center gap-4 hover:bg-slate-50/60 transition-colors">
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                        idx === 0 ? "bg-yellow-100 text-yellow-700" :
+                        idx === 1 ? "bg-slate-100 text-slate-600" :
+                        idx === 2 ? "bg-orange-100 text-orange-700" : "bg-blue-50 text-blue-500"
+                      }`}>{idx + 1}</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-slate-800 truncate">{c.email}</div>
+                        <div className="text-xs text-slate-400">{c.events} engagement {c.events === 1 ? "event" : "events"}</div>
+                      </div>
+                      {c.latest_event_type && (
+                        <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium border ${evtStyle}`}>
+                          {c.latest_event_type.replace(/_/g, " ")}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ── Channel Breakdown table ───────────────────────────── */}
           {data.breakdown_by_channel?.length > 0 && (
             <div className="card overflow-hidden">
               <div className="px-5 py-4 border-b border-slate-100">
                 <h3 className="font-semibold text-slate-800 text-sm">Channel Breakdown</h3>
               </div>
-              <div className="divide-y divide-slate-50">
-                <div className="grid grid-cols-6 px-5 py-2 text-[11px] text-slate-400 uppercase tracking-wider">
-                  {["Channel","Sent","Opened","Clicked","Answered","Conversions"].map((h) => (
+              <div className="divide-y divide-slate-50 overflow-x-auto">
+                <div className="grid grid-cols-10 px-5 py-2 text-[11px] text-slate-400 uppercase tracking-wider min-w-[700px]">
+                  {["Channel","Sent","Delivered","Opened","Clicked","Answered","Busy","No Answer","Bounced","Conv."].map((h) => (
                     <div key={h}>{h}</div>
                   ))}
                 </div>
                 {data.breakdown_by_channel.map((ch) => (
-                  <div key={ch.channel} className="grid grid-cols-6 px-5 py-3 text-sm text-slate-700 hover:bg-blue-50/30 transition-colors">
-                    <div className="font-semibold text-slate-800">{ch.channel}</div>
+                  <div key={ch.channel} className="grid grid-cols-10 px-5 py-3 text-sm text-slate-700 hover:bg-blue-50/30 transition-colors min-w-[700px]">
+                    <div className="font-semibold text-slate-800 flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full ${ch.channel === "Email" ? "bg-blue-500" : ch.channel === "Call" ? "bg-indigo-500" : "bg-emerald-500"}`} />
+                      {ch.channel}
+                    </div>
                     <div>{ch.sent}</div>
+                    <div className={ch.delivered > 0 ? "text-cyan-600 font-medium" : ""}>{ch.delivered}</div>
                     <div>{ch.opened}</div>
                     <div>{ch.clicked}</div>
-                    <div>{ch.answered}</div>
+                    <div className={ch.answered > 0 ? "text-emerald-600 font-medium" : ""}>{ch.answered}</div>
+                    <div className={ch.busy > 0 ? "text-amber-600 font-medium" : ""}>{ch.busy}</div>
+                    <div className={ch.no_answer > 0 ? "text-orange-500 font-medium" : ""}>{ch.no_answer}</div>
+                    <div className={ch.bounced > 0 ? "text-red-500 font-medium" : ""}>{ch.bounced}</div>
                     <div>{ch.conversion_count}</div>
                   </div>
                 ))}
@@ -2642,8 +2899,62 @@ function CampaignKanbanCard({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Tracking View
+//  Tracking View — Game-Changing Live Event Feed
 // ─────────────────────────────────────────────────────────────────────────────
+
+/* SVG icon paths for event types — crisp at any size */
+const EVT_SVG: Record<string, { d: string; color: string; bg: string; ring: string; label: string }> = {
+  SENT:           { d: "M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z", color: "text-blue-500",    bg: "bg-blue-50",      ring: "ring-blue-200",    label: "Sent" },
+  PROCESSED:      { d: "M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z",                                                                                                                                                 color: "text-slate-500",  bg: "bg-slate-50",     ring: "ring-slate-200",   label: "Processed" },
+  DELIVERED:      { d: "M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z",                                                                                                                                    color: "text-emerald-500",bg: "bg-emerald-50",   ring: "ring-emerald-200", label: "Delivered" },
+  OPENED:         { d: "M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178ZM15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z", color: "text-violet-500", bg: "bg-violet-50",    ring: "ring-violet-200",  label: "Opened" },
+  CLICKED:        { d: "M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244",                        color: "text-pink-500",   bg: "bg-pink-50",      ring: "ring-pink-200",    label: "Clicked" },
+  BOUNCED:        { d: "M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z",                    color: "text-red-500",    bg: "bg-red-50",       ring: "ring-red-200",     label: "Bounced" },
+  DROPPED:        { d: "m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z",                                                                                                                             color: "text-red-400",    bg: "bg-red-50",       ring: "ring-red-200",     label: "Dropped" },
+  SPAM_REPORT:    { d: "M3 3v1.5M3 21v-6m0 0 2.77-.693a9 9 0 0 1 6.208.682l.108.054a9 9 0 0 0 6.086.71l3.114-.732a48.524 48.524 0 0 1-.005-10.499l-3.11.732a9 9 0 0 1-6.085-.711l-.108-.054a9 9 0 0 0-6.208-.682L3 4.5M3 15V4.5", color: "text-orange-500", bg: "bg-orange-50",    ring: "ring-orange-200",  label: "Spam" },
+  UNSUBSCRIBED:   { d: "M18.364 18.364A9 9 0 0 0 5.636 5.636m12.728 12.728A9 9 0 0 1 5.636 5.636m12.728 12.728L5.636 5.636",                                                                                                 color: "text-slate-400",  bg: "bg-slate-100",    ring: "ring-slate-200",   label: "Unsub" },
+  ANSWERED:       { d: "M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z", color: "text-indigo-500", bg: "bg-indigo-50",    ring: "ring-indigo-200",  label: "Answered" },
+  BUSY:           { d: "M14.25 9.75v-4.5m0 4.5h4.5m-4.5 0 3.526-3.526A9 9 0 1 0 21 12h-4.5",                                                                                                                                  color: "text-amber-500",  bg: "bg-amber-50",     ring: "ring-amber-200",   label: "Busy" },
+  NO_ANSWER:      { d: "M15.75 3.75 18 6m0 0 2.25 2.25M18 6l2.25-2.25M18 6l-2.25 2.25m1.5 13.5c-8.284 0-15-6.716-15-15V4.5A2.25 2.25 0 0 1 6.75 2.25h1.372c.516 0 .966.351 1.091.852l1.106 4.423c.11.44-.055.902-.417 1.173l-1.293.97a1.062 1.062 0 0 0-.38 1.21 12.035 12.035 0 0 0 7.143 7.143c.441.162.928-.004 1.21-.38l.97-1.293a1.125 1.125 0 0 1 1.173-.417l4.423 1.106c.5.125.852.575.852 1.091V19.5a2.25 2.25 0 0 1-2.25 2.25h-2.25Z", color: "text-slate-400",  bg: "bg-slate-100",    ring: "ring-slate-200",   label: "No Answer" },
+  VOICEMAIL:      { d: "M21.75 9v.906a2.25 2.25 0 0 1-1.183 1.981l-6.478 3.488M2.25 9v.906a2.25 2.25 0 0 0 1.183 1.981l6.478 3.488m8.839 2.51-4.66-2.51m0 0-1.023-.55a2.25 2.25 0 0 0-2.134 0l-1.022.55m0 0-4.661 2.51",    color: "text-slate-500",  bg: "bg-slate-50",     ring: "ring-slate-200",   label: "Voicemail" },
+  FAILED:         { d: "m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z",                                                                                                                             color: "text-red-500",    bg: "bg-red-50",       ring: "ring-red-200",     label: "Failed" },
+  ACCEPTED:       { d: "M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z", color: "text-blue-500",   bg: "bg-blue-50",      ring: "ring-blue-200",    label: "Accepted" },
+  MESSAGE_SENT:   { d: "M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z", color: "text-blue-600",   bg: "bg-blue-50",      ring: "ring-blue-200",    label: "Message" },
+  REPLIED:        { d: "M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3",                                                                                                                                                          color: "text-emerald-500",bg: "bg-emerald-50",   ring: "ring-emerald-200", label: "Replied" },
+  VIEWED_PROFILE: { d: "M17.982 18.725A7.488 7.488 0 0 0 12 15.75a7.488 7.488 0 0 0-5.982 2.975m11.963 0a9 9 0 1 0-11.963 0m11.963 0A8.966 8.966 0 0 1 12 21a8.966 8.966 0 0 1-5.982-2.275M15 9.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z", color: "text-violet-500", bg: "bg-violet-50",    ring: "ring-violet-200",  label: "Profile" },
+  IGNORED:        { d: "M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88", color: "text-slate-400",  bg: "bg-slate-50",     ring: "ring-slate-200",   label: "Ignored" },
+};
+
+function EvtIcon({ type, size = 20 }: { type: string; size?: number }) {
+  const meta = EVT_SVG[type] ?? EVT_SVG.SENT;
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" width={size} height={size} className={meta.color}>
+      <path strokeLinecap="round" strokeLinejoin="round" d={meta.d} />
+    </svg>
+  );
+}
+
+function relativeTime(iso: string) {
+  const d = new Date(asUTC(iso));
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (diff < 5) return "just now";
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
+function formatTimestamp(iso: string) {
+  if (!iso || typeof iso !== "string") return "—";
+  const d = new Date(asUTC(iso));
+  if (isNaN(d.getTime())) return "—";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
+    `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  );
+}
+
 function TrackingView({
   campaigns,
   toast,
@@ -2656,221 +2967,587 @@ function TrackingView({
   );
 
   const [selectedId, setSelectedId] = useState<string>(eligible[0]?.id ?? "");
-  const [tab, setTab] = useState<"sendgrid" | "call" | "linkedin">("sendgrid");
+  const [events, setEvents] = useState<TrackingEvent[]>([]);
+  const [feedLoading, setFeedLoading] = useState(false);
+  const [channelFilter, setChannelFilter] = useState<string>("All");
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  const [showSimulator, setShowSimulator] = useState(false);
+  const [secondsElapsed, setSecondsElapsed] = useState(0);
+  const [expandedContact, setExpandedContact] = useState<string | null>(null);
+  const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
 
-  const [sgEmail, setSgEmail] = useState("sarweshero@gmail.com");
-  const [sgMsgId, setSgMsgId] = useState("4BWDnvuMTr22C2CzTF-GmA");
+  // Simulator state
+  const [simTab, setSimTab] = useState<"sendgrid" | "call" | "linkedin">("sendgrid");
+  const [sgEmail, setSgEmail] = useState("");
+  const [sgMsgId, setSgMsgId] = useState("");
   const [sgEvent, setSgEvent] = useState("open");
   const [sgUrl, setSgUrl] = useState("https://infynd.com");
   const [sgLoading, setSgLoading] = useState(false);
-  const [sgResult, setSgResult] = useState("");
+  const [callEmail, setCallEmail] = useState("");
+  const [callOutcome, setCallOutcome] = useState("ANSWERED");
+  const [callDuration, setCallDuration] = useState(120);
+  const [callLoading, setCallLoading] = useState(false);
+  const [liEmail, setLiEmail] = useState("");
+  const [liEvent, setLiEvent] = useState("ACCEPTED");
+  const [liLoading, setLiLoading] = useState(false);
+
+  const fetchEvents = useCallback(async (silent = false) => {
+    if (!silent) setFeedLoading(true);
+    if (selectedId) {
+      const { data, error } = await getTrackingEvents(selectedId, { channel: channelFilter === "All" ? undefined : channelFilter, limit: 200 });
+      if (!silent) setFeedLoading(false);
+      if (error) { if (!silent) toast(error, "error"); return; }
+      setEvents(data?.events ?? []);
+    } else {
+      const { data, error } = await getAllTrackingEvents(200);
+      if (!silent) setFeedLoading(false);
+      if (error) { if (!silent) toast(error, "error"); return; }
+      setEvents(data ?? []);
+    }
+    setLastRefresh(new Date());
+    setSecondsElapsed(0);
+  }, [selectedId, channelFilter]);
+
+  useEffect(() => {
+    fetchEvents();
+    const iv = setInterval(() => fetchEvents(true), 8_000);
+    return () => clearInterval(iv);
+  }, [fetchEvents]);
+
+  // Tick "Updated X s ago" every second
+  useEffect(() => {
+    const t = setInterval(() => setSecondsElapsed((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const filteredEvents = channelFilter === "All"
+    ? events
+    : events.filter((e) => e.channel === channelFilter);
+
+  // Stats computed from events
+  const stats = {
+    total:     events.length,
+    email:     events.filter((e) => e.channel === "Email").length,
+    call:      events.filter((e) => e.channel === "Call").length,
+    linkedin:  events.filter((e) => e.channel === "LinkedIn").length,
+    delivered: events.filter((e) => e.event_type === "DELIVERED").length,
+    opened:    events.filter((e) => e.event_type === "OPENED").length,
+    clicked:   events.filter((e) => e.event_type === "CLICKED").length,
+    bounced:   events.filter((e) => ["BOUNCED","DROPPED","FAILED"].includes(e.event_type)).length,
+  };
+
+  const channels = [
+    { key: "All",      icon: "M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25a2.25 2.25 0 0 1-2.25-2.25v-2.25Z", count: stats.total },
+    { key: "Email",    icon: "M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75", count: stats.email },
+    { key: "Call",     icon: "M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z", count: stats.call },
+    { key: "LinkedIn", icon: "M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z", count: stats.linkedin },
+  ];
+
+  const inputCls = "input-premium";
 
   async function sendSgEvent() {
     if (!selectedId) { toast("Select a campaign first", "error"); return; }
     setSgLoading(true);
-    const events = [{ email: sgEmail, event: sgEvent, sg_message_id: sgMsgId, campaign_id: selectedId, timestamp: Math.floor(Date.now() / 1000), ...(sgEvent === "click" ? { url: sgUrl } : {}) }];
-    const { data, error } = await sendgridWebhook(events);
+    const evts = [{ email: sgEmail, event: sgEvent, sg_message_id: sgMsgId, campaign_id: selectedId, timestamp: Math.floor(Date.now() / 1000), ...(sgEvent === "click" ? { url: sgUrl } : {}) }];
+    const { error } = await sendgridWebhook(evts);
     setSgLoading(false);
-    if (error) { toast(error, "error"); setSgResult(`Error: ${error}`); return; }
+    if (error) { toast(error, "error"); return; }
     toast("SendGrid event sent!", "success");
-    setSgResult(JSON.stringify(data, null, 2));
+    fetchEvents(true);
   }
-
-  const [callEmail, setCallEmail] = useState("sarweshero@gmail.com");
-  const [callOutcome, setCallOutcome] = useState("ANSWERED");
-  const [callDuration, setCallDuration] = useState(120);
-  const [callLoading, setCallLoading] = useState(false);
-  const [callResult, setCallResult] = useState("");
 
   async function sendCall() {
     if (!selectedId) { toast("Select a campaign first", "error"); return; }
     setCallLoading(true);
-    const { data, error } = await callTracking({ contact_email: callEmail, campaign_id: selectedId, outcome: callOutcome, duration_seconds: callDuration });
+    const { error } = await callTracking({ contact_email: callEmail, campaign_id: selectedId, outcome: callOutcome, duration_seconds: callDuration });
     setCallLoading(false);
-    if (error) { toast(error, "error"); setCallResult(`Error: ${error}`); return; }
+    if (error) { toast(error, "error"); return; }
     toast("Call event recorded!", "success");
-    setCallResult(JSON.stringify(data, null, 2));
+    fetchEvents(true);
   }
-
-  const [liEmail, setLiEmail] = useState("sarweshero@gmail.com");
-  const [liEvent, setLiEvent] = useState("ACCEPTED");
-  const [liLoading, setLiLoading] = useState(false);
-  const [liResult, setLiResult] = useState("");
 
   async function sendLinkedIn() {
     if (!selectedId) { toast("Select a campaign first", "error"); return; }
     setLiLoading(true);
-    const { data, error } = await linkedinTracking({ contact_email: liEmail, campaign_id: selectedId, event_type: liEvent });
+    const { error } = await linkedinTracking({ contact_email: liEmail, campaign_id: selectedId, event_type: liEvent });
     setLiLoading(false);
-    if (error) { toast(error, "error"); setLiResult(`Error: ${error}`); return; }
+    if (error) { toast(error, "error"); return; }
     toast("LinkedIn event recorded!", "success");
-    setLiResult(JSON.stringify(data, null, 2));
+    fetchEvents(true);
   }
-
-  const TABS = ["sendgrid","call","linkedin"] as const;
-  const inputCls = "input-premium";
-
-  const resultBox = (res: string) =>
-    res ? (
-      <pre className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs text-emerald-700 overflow-x-auto max-h-40">
-        {res}
-      </pre>
-    ) : null;
 
   const selectedCamp = eligible.find((c) => c.id === selectedId) ?? null;
 
   return (
-    <div className="view-enter space-y-6">
-      <div>
-        <h2 className="text-xl font-bold text-slate-900 font-display">Tracking Simulator</h2>
-        <p className="text-slate-500 text-sm">Pick a campaign, then fire a tracking event</p>
+    <div className="view-enter space-y-5">
+
+      {/* ── HERO HEADER ── */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 p-6 pb-5">
+        {/* Decorative mesh */}
+        <div className="absolute inset-0 opacity-[0.07]" style={{ backgroundImage: "radial-gradient(circle at 20% 50%, #3b82f6 0%, transparent 50%), radial-gradient(circle at 80% 20%, #8b5cf6 0%, transparent 50%), radial-gradient(circle at 60% 80%, #06b6d4 0%, transparent 50%)" }} />
+        <div className="relative flex items-start justify-between">
+          <div>
+            <div className="flex items-center gap-3 mb-1">
+              <h2 className="text-2xl font-extrabold text-white tracking-tight font-display">Event Tracking</h2>
+              <div className="flex items-center gap-1.5 bg-emerald-500/20 backdrop-blur-sm border border-emerald-400/30 rounded-full px-3 py-1">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
+                </span>
+                <span className="text-[10px] font-bold text-emerald-300 uppercase tracking-widest">Live</span>
+              </div>
+            </div>
+            <p className="text-blue-200/70 text-sm">Real-time stream of email, call &amp; LinkedIn engagement events</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <div className="text-[10px] text-blue-300/50 uppercase tracking-wider">Last sync</div>
+              <div className="text-sm text-blue-100 font-mono tabular-nums">{secondsElapsed}s ago</div>
+            </div>
+            <button
+              onClick={() => setShowSimulator(!showSimulator)}
+              className={`text-xs px-4 py-2 rounded-xl font-medium transition-all backdrop-blur-sm border ${
+                showSimulator
+                  ? "bg-blue-500/30 border-blue-400/40 text-blue-200"
+                  : "bg-white/10 border-white/10 text-blue-200 hover:bg-white/20"
+              }`}
+            >
+              <span className="mr-1.5">{showSimulator ? "▾" : "▸"}</span>
+              Simulator
+            </button>
+          </div>
+        </div>
+
+        {/* ── STATS RIBBON ── */}
+        <div className="relative grid grid-cols-4 lg:grid-cols-8 gap-3 mt-5">
+          {[
+            { label: "Total",     value: stats.total,     c: "text-white" },
+            { label: "Delivered", value: stats.delivered,  c: "text-emerald-300" },
+            { label: "Opened",    value: stats.opened,     c: "text-violet-300" },
+            { label: "Clicked",   value: stats.clicked,    c: "text-pink-300" },
+            { label: "Bounced",   value: stats.bounced,    c: "text-red-300" },
+            { label: "Email",     value: stats.email,      c: "text-blue-300" },
+            { label: "Calls",     value: stats.call,       c: "text-indigo-300" },
+            { label: "LinkedIn",  value: stats.linkedin,   c: "text-cyan-300" },
+          ].map((s) => (
+            <div key={s.label} className="bg-white/[0.06] backdrop-blur-sm rounded-xl px-3 py-2.5 border border-white/[0.06]">
+              <div className="text-[10px] text-blue-200/40 uppercase tracking-wider mb-0.5">{s.label}</div>
+              <div className={`text-lg font-bold font-display tabular-nums ${s.c}`}>{s.value}</div>
+            </div>
+          ))}
+        </div>
       </div>
 
-      <div className="flex gap-6 items-start">
-        <div className="flex-1 min-w-0">
-          <div className="text-xs text-slate-400 uppercase tracking-wider mb-3">
-            Eligible campaigns ({eligible.length})
+      {/* ── CONTROLS ROW ── */}
+      <div className="flex flex-wrap items-center gap-4">
+        {/* Campaign selector */}
+        <div className="relative">
+          <select
+            value={selectedId}
+            onChange={(e) => setSelectedId(e.target.value)}
+            className="appearance-none bg-white border border-slate-200 rounded-xl pl-4 pr-10 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:border-blue-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all min-w-[220px] cursor-pointer"
+          >
+            <option value="">All campaigns</option>
+            {eligible.map((c) => (
+              <option key={c.id} value={c.id}>{c.name.slice(0, 50)}</option>
+            ))}
+          </select>
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </div>
-          {eligible.length === 0 ? (
-            <div className="card p-8 text-center">
-              <div className="text-3xl mb-2">◎</div>
-              <div className="text-slate-400 text-sm">No dispatched or completed campaigns yet</div>
+        </div>
+        {selectedCamp && (
+          <span className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200 font-medium">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+            {selectedCamp.pipeline_state}
+          </span>
+        )}
+
+        {/* Channel filter — segmented control */}
+        <div className="flex bg-slate-100/80 p-1 rounded-xl border border-slate-200/60 ml-auto">
+          {channels.map((ch) => {
+            const active = channelFilter === ch.key;
+            return (
+              <button
+                key={ch.key}
+                onClick={() => setChannelFilter(ch.key)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
+                  active
+                    ? "bg-white text-blue-700 shadow-sm border border-slate-200 ring-1 ring-blue-100"
+                    : "text-slate-500 hover:text-slate-700 hover:bg-white/50"
+                }`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" width={14} height={14} className={active ? "text-blue-500" : "text-slate-400"}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d={ch.icon} />
+                </svg>
+                {ch.key}
+                <span className={`min-w-[20px] text-center text-[10px] px-1.5 py-0.5 rounded-full font-bold tabular-nums ${
+                  active ? "bg-blue-100 text-blue-600" : "bg-slate-200/70 text-slate-400"
+                }`}>
+                  {ch.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── MAIN CONTENT ── */}
+      <div className="flex gap-5 items-start">
+        {/* Event Feed */}
+        <div className="flex-1 min-w-0">
+          {feedLoading ? (
+            <div className="py-20 flex flex-col items-center justify-center gap-4">
+              <div className="loader-page-ring" />
+              <span className="text-slate-400 text-sm">Loading events…</span>
+            </div>
+          ) : filteredEvents.length === 0 ? (
+            <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-gradient-to-b from-white to-slate-50 py-20 text-center">
+              <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor" width={32} height={32} className="text-slate-300">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 0 0 6 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0 1 18 16.5h-2.25m-7.5 0h7.5m-7.5 0-1 3m8.5-3 1 3m0 0 .5 1.5m-.5-1.5h-9.5m0 0-.5 1.5M9 11.25v1.5M12 9v3.75m3-6v6" />
+                </svg>
+              </div>
+              <div className="text-slate-500 font-semibold text-sm mb-1">No events yet</div>
+              <div className="text-slate-400 text-xs max-w-xs mx-auto">Events stream in automatically as SendGrid webhooks, Twilio call callbacks, and LinkedIn tracking fire</div>
             </div>
           ) : (
-            <div className="grid grid-cols-2 xl:grid-cols-3 gap-3 max-h-[calc(100vh-14rem)] overflow-y-auto pr-1">
-              {eligible.map((c) => (
-                <CampaignKanbanCard
-                  key={c.id}
-                  campaign={c}
-                  selected={c.id === selectedId}
-                  onSelect={() => setSelectedId(c.id)}
-                />
-              ))}
+            <div className="relative max-h-[calc(100vh-22rem)] overflow-y-auto pr-1 -mr-1 scrollbar-thin">
+              {/* Timeline spine */}
+              <div className="absolute left-[23px] top-0 bottom-0 w-px bg-gradient-to-b from-blue-200 via-slate-200 to-transparent pointer-events-none" />
+
+              {((): React.ReactNode => {
+                // Group events by contact_email — latest event per person is first
+                const groups = new Map<string, TrackingEvent[]>();
+                filteredEvents.forEach((ev) => {
+                  const key = ev.contact_email;
+                  if (!groups.has(key)) groups.set(key, []);
+                  groups.get(key)!.push(ev);
+                });
+                const contactList = Array.from(groups.entries());
+
+                return contactList.map(([email, evts], groupIdx) => {
+                  const latest = evts[0]; // sorted DESC, so index 0 = most recent
+                  const meta = EVT_SVG[latest.event_type] ?? EVT_SVG.SENT;
+                  const isContactExpanded = expandedContact === email;
+                  const isError = ["BOUNCED","DROPPED","FAILED","SPAM_REPORT"].includes(latest.event_type);
+                  const isSuccess = ["DELIVERED","OPENED","CLICKED","ANSWERED","REPLIED","ACCEPTED"].includes(latest.event_type);
+
+                  // Compute the overall "best" status label for the pill ribbon
+                  const STATUS_RANK: Record<string, number> = {
+                    CLICKED: 9, REPLIED: 9, ACCEPTED: 9,
+                    OPENED: 8,
+                    ANSWERED: 7,
+                    DELIVERED: 6,
+                    PROCESSED: 5,
+                    SENT: 4,
+                    VOICEMAIL: 3,
+                    BUSY: 2, NO_ANSWER: 2,
+                    BOUNCED: 1, DROPPED: 1, FAILED: 1, SPAM_REPORT: 1, UNSUBSCRIBED: 1,
+                  };
+                  const allTypes = evts.map((e) => e.event_type);
+
+                  return (
+                    <div key={email} className="relative pl-12 mb-1.5 group">
+                      {/* Timeline node */}
+                      <div className={`absolute left-[15px] top-4 w-[17px] h-[17px] rounded-full border-2 flex items-center justify-center z-10 transition-all ${
+                        isError ? "bg-red-50 border-red-300"
+                          : isSuccess ? "bg-emerald-50 border-emerald-300"
+                          : "bg-white border-slate-300"
+                      } ${groupIdx === 0 ? "ring-4 ring-blue-100/60" : ""}`}>
+                        <div className={`w-2 h-2 rounded-full ${
+                          isError ? "bg-red-400" : isSuccess ? "bg-emerald-400" : "bg-slate-400"
+                        }`} />
+                      </div>
+
+                      {/* ── CONTACT CARD ── */}
+                      <div className={`rounded-xl border transition-all ${
+                        isContactExpanded
+                          ? `bg-white shadow-lg border-slate-200 ring-2 ${meta.ring}`
+                          : "bg-white/80 border-slate-100 hover:bg-white hover:shadow-md hover:border-slate-200"
+                      }`}>
+
+                        {/* Main row — latest status */}
+                        <div
+                          className="flex items-center gap-3 px-4 py-3 cursor-pointer"
+                          onClick={() => {
+                            setExpandedContact(isContactExpanded ? null : email);
+                            setExpandedEventId(null);
+                          }}
+                        >
+                          {/* Icon */}
+                          <div className={`w-9 h-9 rounded-xl ${meta.bg} flex items-center justify-center shrink-0 transition-transform group-hover:scale-110`}>
+                            <EvtIcon type={latest.event_type} size={18} />
+                          </div>
+
+                          {/* Content */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className={`text-sm font-bold ${meta.color}`}>
+                                {(EVT_SVG[latest.event_type]?.label ?? latest.event_type).toUpperCase()}
+                              </span>
+                              <span className={`text-[10px] px-2 py-0.5 rounded-md font-semibold uppercase tracking-wider ${
+                                latest.channel === "Email" ? "bg-blue-50 text-blue-500 border border-blue-100" :
+                                latest.channel === "Call" ? "bg-indigo-50 text-indigo-500 border border-indigo-100" :
+                                "bg-cyan-50 text-cyan-600 border border-cyan-100"
+                              }`}>
+                                {latest.channel}
+                              </span>
+                              {/* All-status pills (compact) */}
+                              <div className="flex items-center gap-1 flex-wrap">
+                                {allTypes.slice(0, 5).map((t, ti) => {
+                                  const m = EVT_SVG[t] ?? EVT_SVG.SENT;
+                                  return (
+                                    <span key={ti} className={`text-[9px] px-1.5 py-0.5 rounded font-semibold ${m.bg} ${m.color}`}>
+                                      {m.label}
+                                    </span>
+                                  );
+                                })}
+                                {allTypes.length > 5 && (
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-400 font-semibold">+{allTypes.length - 5}</span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="text-xs text-slate-400 truncate mt-0.5">{email}</div>
+                          </div>
+
+                          {/* Right — timestamp + event count */}
+                          <div className="text-right shrink-0">
+                            <div className="text-[11px] text-slate-400 font-mono tabular-nums">{formatTimestamp(latest.occurred_at)}</div>
+                            <div className="text-[10px] text-slate-300">{evts.length} event{evts.length !== 1 ? "s" : ""}</div>
+                          </div>
+
+                          {/* Expand chevron */}
+                          <svg xmlns="http://www.w3.org/2000/svg" width={14} height={14} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"
+                            className={`text-slate-300 transition-transform shrink-0 ${isContactExpanded ? "rotate-180" : ""}`}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                          </svg>
+                        </div>
+
+                        {/* ── EXPANDED: all events for this contact ── */}
+                        {isContactExpanded && (
+                          <div className="border-t border-slate-100 px-4 pb-3 pt-2 space-y-1 animate-in fade-in slide-in-from-top-1">
+                            <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-2 font-semibold">All Events ({evts.length})</div>
+                            {evts.map((ev) => {
+                              const em = EVT_SVG[ev.event_type] ?? EVT_SVG.SENT;
+                              const isEvtExpanded = expandedEventId === ev.id;
+                              return (
+                                <div
+                                  key={ev.id}
+                                  className={`rounded-lg border cursor-pointer transition-all ${
+                                    isEvtExpanded
+                                      ? `bg-slate-50 border-slate-200 ring-1 ${em.ring}`
+                                      : "bg-slate-50/60 border-slate-100 hover:bg-slate-100 hover:border-slate-200"
+                                  }`}
+                                  onClick={(e) => { e.stopPropagation(); setExpandedEventId(isEvtExpanded ? null : ev.id); }}
+                                >
+                                  <div className="flex items-center gap-2.5 px-3 py-2">
+                                    <div className={`w-7 h-7 rounded-lg ${em.bg} flex items-center justify-center shrink-0`}>
+                                      <EvtIcon type={ev.event_type} size={14} />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <span className={`text-xs font-bold ${em.color}`}>{em.label.toUpperCase()}</span>
+                                      <span className={`ml-2 text-[9px] px-1.5 py-0.5 rounded font-semibold ${
+                                        ev.channel === "Email" ? "bg-blue-50 text-blue-500" :
+                                        ev.channel === "Call" ? "bg-indigo-50 text-indigo-500" :
+                                        "bg-cyan-50 text-cyan-600"
+                                      }`}>{ev.channel}</span>
+                                    </div>
+                                    <div className="text-right shrink-0">
+                                      <div className="text-[10px] text-slate-400 font-mono">{formatTimestamp(ev.occurred_at)}</div>
+                                      <div className="text-[9px] text-slate-300">{relativeTime(ev.occurred_at)}</div>
+                                    </div>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width={12} height={12} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"
+                                      className={`text-slate-300 transition-transform shrink-0 ${isEvtExpanded ? "rotate-180" : ""}`}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                                    </svg>
+                                  </div>
+                                  {/* Event payload detail */}
+                                  {isEvtExpanded && (
+                                    <div className="px-3 pb-2.5 pt-1 border-t border-slate-100 space-y-1.5">
+                                      <div className="grid grid-cols-2 gap-2">
+                                        <div className="bg-white rounded-md p-2">
+                                          <div className="text-[9px] text-slate-400 uppercase tracking-wider mb-0.5">Event ID</div>
+                                          <div className="text-[10px] text-slate-600 font-mono">{ev.id.slice(0, 12)}…</div>
+                                        </div>
+                                        <div className="bg-white rounded-md p-2">
+                                          <div className="text-[9px] text-slate-400 uppercase tracking-wider mb-0.5">Campaign</div>
+                                          <div className="text-[10px] text-slate-600 font-mono">{ev.campaign_id.slice(0, 8)}…</div>
+                                        </div>
+                                      </div>
+                                      {ev.payload && Object.keys(ev.payload).length > 0 && (
+                                        <div className="bg-white rounded-md p-2">
+                                          <div className="text-[9px] text-slate-400 uppercase tracking-wider mb-1">Payload</div>
+                                          <div className="grid grid-cols-2 gap-1">
+                                            {Object.entries(ev.payload).map(([k, v]) => (
+                                              <div key={k} className="flex items-baseline gap-1">
+                                                <span className="text-[9px] text-slate-400 font-mono">{k}:</span>
+                                                <span className="text-[10px] text-slate-700 font-medium truncate">{String(v)}</span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
             </div>
           )}
         </div>
 
-        <div className="w-80 shrink-0 space-y-4">
-          <div
-            className={`rounded-xl border px-4 py-3 text-xs ${
-              selectedCamp
-                ? "border-blue-200 bg-blue-50 text-blue-700"
-                : "border-slate-200 bg-slate-50 text-slate-400"
-            }`}
-          >
-            {selectedCamp ? (
-              <>Selected: <span className="font-semibold">{selectedCamp.name.slice(0, 40)}</span></>
-            ) : "No campaign selected"}
-          </div>
-
-          <div className="flex gap-1 bg-slate-100 p-1 rounded-xl">
-            {TABS.map((t) => (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
-                  tab === t
-                    ? "bg-white text-blue-700 shadow-sm border border-slate-200"
-                    : "text-slate-500 hover:text-slate-700"
-                }`}
-              >
-                {t === "sendgrid" ? "✉" : t === "call" ? "☎" : "🔗"}
-                <span className="ml-1 capitalize">{t === "sendgrid" ? "Email" : t}</span>
-              </button>
-            ))}
-          </div>
-
-          <div className="card p-5 space-y-4">
-            {tab === "sendgrid" && (
-              <>
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1.5 font-medium">Contact Email</label>
-                  <input value={sgEmail} onChange={(e) => setSgEmail(e.target.value)} type="email" className={inputCls} />
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1.5 font-medium">Event Type</label>
-                  <select value={sgEvent} onChange={(e) => setSgEvent(e.target.value)} className={inputCls}>
-                    {["open","click","delivered","bounce","unsubscribe"].map((e) => (
-                      <option key={e} value={e}>{e}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1.5 font-medium">Message ID</label>
-                  <input value={sgMsgId} onChange={(e) => setSgMsgId(e.target.value)} className={inputCls} />
-                </div>
-                {sgEvent === "click" && (
-                  <div>
-                    <label className="block text-xs text-slate-500 mb-1.5 font-medium">Click URL</label>
-                    <input value={sgUrl} onChange={(e) => setSgUrl(e.target.value)} className={inputCls} />
+        {/* ── SIMULATOR DRAWER ── */}
+        {showSimulator && (
+          <div className="w-[340px] shrink-0 space-y-4 animate-in fade-in slide-in-from-right-4">
+            <div className="rounded-2xl border border-slate-200 bg-white shadow-lg overflow-hidden">
+              {/* Simulator header */}
+              <div className="bg-gradient-to-r from-slate-50 to-blue-50/50 border-b border-slate-100 px-5 py-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" width={14} height={14} className="text-blue-600">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 0 1-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 0 1 4.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0 1 12 15a9.065 9.065 0 0 0-6.23-.693L5 14.5m14.8.8 1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0 1 12 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
+                    </svg>
                   </div>
+                  <div>
+                    <div className="text-sm font-bold text-slate-800">Event Simulator</div>
+                    <div className="text-[10px] text-slate-400">Fire test events manually</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Target campaign */}
+              <div className="px-5 py-3 border-b border-slate-100">
+                <div className={`rounded-xl px-3 py-2.5 text-xs ${
+                  selectedCamp
+                    ? "bg-blue-50 text-blue-700 border border-blue-200"
+                    : "bg-slate-50 text-slate-400 border border-slate-200"
+                }`}>
+                  {selectedCamp ? (
+                    <div className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                      <span className="font-semibold truncate">{selectedCamp.name.slice(0, 32)}</span>
+                    </div>
+                  ) : "Select a campaign above"}
+                </div>
+              </div>
+
+              {/* Channel tabs */}
+              <div className="px-5 pt-3">
+                <div className="flex gap-1 bg-slate-100 p-1 rounded-xl">
+                  {(["sendgrid","call","linkedin"] as const).map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setSimTab(t)}
+                      className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
+                        simTab === t
+                          ? "bg-white text-blue-700 shadow-sm border border-slate-200"
+                          : "text-slate-500 hover:text-slate-700"
+                      }`}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" width={12} height={12}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d={
+                          t === "sendgrid" ? "M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75"
+                          : t === "call" ? "M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z"
+                          : "M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z"
+                        } />
+                      </svg>
+                      {t === "sendgrid" ? "Email" : t === "call" ? "Call" : "LinkedIn"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Form body */}
+              <div className="p-5 space-y-3.5">
+                {simTab === "sendgrid" && (
+                  <>
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1 font-semibold uppercase tracking-wider">Email</label>
+                      <input value={sgEmail} onChange={(e) => setSgEmail(e.target.value)} type="email" placeholder="contact@example.com" className={inputCls} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] text-slate-500 mb-1 font-semibold uppercase tracking-wider">Event</label>
+                        <select value={sgEvent} onChange={(e) => setSgEvent(e.target.value)} className={inputCls}>
+                          {["open","click","delivered","bounce","unsubscribe"].map((e) => (
+                            <option key={e} value={e}>{e}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-slate-500 mb-1 font-semibold uppercase tracking-wider">Msg ID</label>
+                        <input value={sgMsgId} onChange={(e) => setSgMsgId(e.target.value)} placeholder="optional" className={inputCls} />
+                      </div>
+                    </div>
+                    {sgEvent === "click" && (
+                      <div>
+                        <label className="block text-[11px] text-slate-500 mb-1 font-semibold uppercase tracking-wider">Click URL</label>
+                        <input value={sgUrl} onChange={(e) => setSgUrl(e.target.value)} className={inputCls} />
+                      </div>
+                    )}
+                    <button onClick={sendSgEvent} disabled={sgLoading || !selectedId} className="w-full btn-brand py-2.5 text-sm rounded-xl">
+                      {sgLoading ? <span className="flex items-center justify-center gap-2"><span className="btn-spinner" />Sending…</span> : "Fire Email Event"}
+                    </button>
+                  </>
                 )}
-                <button
-                  onClick={sendSgEvent}
-                  disabled={sgLoading || !selectedId}
-                  className="w-full btn-brand py-2.5 text-sm"
-                >
-                  {sgLoading ? <span className="flex items-center justify-center gap-2"><span className="btn-spinner" />Sending…</span> : "Fire SendGrid Event"}
-                </button>
-                {resultBox(sgResult)}
-              </>
-            )}
 
-            {tab === "call" && (
-              <>
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1.5 font-medium">Contact Email</label>
-                  <input value={callEmail} onChange={(e) => setCallEmail(e.target.value)} type="email" className={inputCls} />
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1.5 font-medium">Outcome</label>
-                  <select value={callOutcome} onChange={(e) => setCallOutcome(e.target.value)} className={inputCls}>
-                    {["ANSWERED","VOICEMAIL","NO_ANSWER","BUSY","FAILED"].map((o) => (
-                      <option key={o} value={o}>{o}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1.5 font-medium">Duration (seconds)</label>
-                  <input type="number" value={callDuration} onChange={(e) => setCallDuration(Number(e.target.value))} className={inputCls} />
-                </div>
-                <button
-                  onClick={sendCall}
-                  disabled={callLoading || !selectedId}
-                  className="w-full btn-brand py-2.5 text-sm"
-                >
-                  {callLoading ? <span className="flex items-center justify-center gap-2"><span className="btn-spinner" />Sending…</span> : "Record Call Event"}
-                </button>
-                {resultBox(callResult)}
-              </>
-            )}
+                {simTab === "call" && (
+                  <>
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1 font-semibold uppercase tracking-wider">Email</label>
+                      <input value={callEmail} onChange={(e) => setCallEmail(e.target.value)} type="email" placeholder="contact@example.com" className={inputCls} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] text-slate-500 mb-1 font-semibold uppercase tracking-wider">Outcome</label>
+                        <select value={callOutcome} onChange={(e) => setCallOutcome(e.target.value)} className={inputCls}>
+                          {["ANSWERED","VOICEMAIL","NO_ANSWER","BUSY","FAILED"].map((o) => (
+                            <option key={o} value={o}>{o}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-slate-500 mb-1 font-semibold uppercase tracking-wider">Duration</label>
+                        <input type="number" value={callDuration} onChange={(e) => setCallDuration(Number(e.target.value))} className={inputCls} />
+                      </div>
+                    </div>
+                    <button onClick={sendCall} disabled={callLoading || !selectedId} className="w-full btn-brand py-2.5 text-sm rounded-xl">
+                      {callLoading ? <span className="flex items-center justify-center gap-2"><span className="btn-spinner" />Sending…</span> : "Record Call Event"}
+                    </button>
+                  </>
+                )}
 
-            {tab === "linkedin" && (
-              <>
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1.5 font-medium">Contact Email</label>
-                  <input value={liEmail} onChange={(e) => setLiEmail(e.target.value)} type="email" className={inputCls} />
-                </div>
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1.5 font-medium">LinkedIn Event</label>
-                  <select value={liEvent} onChange={(e) => setLiEvent(e.target.value)} className={inputCls}>
-                    {["ACCEPTED","MESSAGE_SENT","REPLIED","VIEWED_PROFILE","IGNORED"].map((e) => (
-                      <option key={e} value={e}>{e}</option>
-                    ))}
-                  </select>
-                </div>
-                <button
-                  onClick={sendLinkedIn}
-                  disabled={liLoading || !selectedId}
-                  className="w-full btn-brand py-2.5 text-sm"
-                >
-                  {liLoading ? <span className="flex items-center justify-center gap-2"><span className="btn-spinner" />Sending…</span> : "Record LinkedIn Event"}
-                </button>
-                {resultBox(liResult)}
-              </>
-            )}
+                {simTab === "linkedin" && (
+                  <>
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1 font-semibold uppercase tracking-wider">Email</label>
+                      <input value={liEmail} onChange={(e) => setLiEmail(e.target.value)} type="email" placeholder="contact@example.com" className={inputCls} />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1 font-semibold uppercase tracking-wider">LinkedIn Event</label>
+                      <select value={liEvent} onChange={(e) => setLiEvent(e.target.value)} className={inputCls}>
+                        {["ACCEPTED","MESSAGE_SENT","REPLIED","VIEWED_PROFILE","IGNORED"].map((e) => (
+                          <option key={e} value={e}>{e}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <button onClick={sendLinkedIn} disabled={liLoading || !selectedId} className="w-full btn-brand py-2.5 text-sm rounded-xl">
+                      {liLoading ? <span className="flex items-center justify-center gap-2"><span className="btn-spinner" />Sending…</span> : "Record LinkedIn Event"}
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
@@ -3056,25 +3733,101 @@ function HistoryView({
                     <div className="py-12 text-center text-slate-400 text-sm">No messages sent yet</div>
                   ) : (
                     <div className="divide-y divide-slate-50 max-h-[420px] overflow-y-auto">
-                      {messages.map((msg) => (
-                        <div key={msg.id} className="px-5 py-4 flex items-start gap-4">
-                          <span className={`shrink-0 text-[11px] px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[msg.send_status] ?? "bg-slate-100 text-slate-500"}`}>
-                            {msg.send_status}
-                          </span>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium text-slate-800">{msg.contact_email}</span>
-                              <span className="text-[11px] bg-blue-50 text-blue-600 border border-blue-100 px-2 py-0.5 rounded-full">{msg.channel}</span>
+                      {messages.map((msg) => {
+                        const isCall = msg.channel === "Call";
+                        const isLinkedIn = msg.channel === "LinkedIn";
+                        const callOutcome = msg.latest_event;
+                        const callDuration = msg.event_payload?.duration_seconds;
+                        const callPhone = msg.event_payload?.contact_phone;
+
+                        const OUTCOME_STYLES: Record<string, string> = {
+                          ANSWERED:  "bg-emerald-50 text-emerald-700 border border-emerald-200",
+                          BUSY:      "bg-amber-50 text-amber-700 border border-amber-200",
+                          NO_ANSWER: "bg-orange-50 text-orange-700 border border-orange-200",
+                          FAILED:    "bg-red-50 text-red-700 border border-red-200",
+                          CANCELED:  "bg-slate-100 text-slate-500 border border-slate-200",
+                          RINGING:   "bg-blue-50 text-blue-600 border border-blue-200",
+                          IN_PROGRESS: "bg-blue-50 text-blue-600 border border-blue-200",
+                          DELIVERED: "bg-cyan-50 text-cyan-700 border border-cyan-200",
+                          OPENED:    "bg-violet-50 text-violet-700 border border-violet-200",
+                          CLICKED:   "bg-pink-50 text-pink-700 border border-pink-200",
+                          BOUNCED:   "bg-red-50 text-red-600 border border-red-200",
+                        };
+
+                        const CHANNEL_ICONS: Record<string, string> = {
+                          Email: "✉",
+                          Call: "📞",
+                          LinkedIn: "🔗",
+                        };
+
+                        return (
+                          <div key={msg.id} className="px-5 py-4 flex items-start gap-4">
+                            {/* Channel icon */}
+                            <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-base shrink-0 ${
+                              isCall ? "bg-indigo-50" : isLinkedIn ? "bg-blue-50" : "bg-sky-50"
+                            }`}>
+                              {CHANNEL_ICONS[msg.channel] ?? "📨"}
                             </div>
-                            <div className="text-xs text-slate-400 mt-0.5">
-                              {msg.sent_at ? fmt(msg.sent_at) : "Not yet sent"}
-                              {msg.provider_message_id && (
-                                <span className="ml-2 text-slate-300 font-mono">{msg.provider_message_id.slice(0, 20)}…</span>
+
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-sm font-medium text-slate-800">{msg.contact_email}</span>
+                                <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${
+                                  isCall ? "bg-indigo-50 text-indigo-600 border border-indigo-100" :
+                                  isLinkedIn ? "bg-blue-50 text-blue-600 border border-blue-100" :
+                                  "bg-sky-50 text-sky-600 border border-sky-100"
+                                }`}>
+                                  {msg.channel}
+                                </span>
+                                <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[msg.send_status] ?? "bg-slate-100 text-slate-500"}`}>
+                                  {msg.send_status}
+                                </span>
+                                {/* Latest event badge */}
+                                {callOutcome && (
+                                  <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${OUTCOME_STYLES[callOutcome] ?? "bg-slate-100 text-slate-500 border border-slate-200"}`}>
+                                    {callOutcome.replace(/_/g, " ")}
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="flex items-center gap-3 mt-1 text-xs text-slate-400 flex-wrap">
+                                {msg.sent_at && <span>{fmt(msg.sent_at)}</span>}
+                                {msg.provider_message_id && (
+                                  <span className="font-mono text-slate-300">{msg.provider_message_id.slice(0, 20)}…</span>
+                                )}
+                              </div>
+
+                              {/* Call-specific details */}
+                              {isCall && msg.event_payload && (
+                                <div className="mt-2 flex items-center gap-4 text-xs">
+                                  {callPhone ? (
+                                    <span className="text-slate-500">
+                                      <span className="text-slate-400">Phone:</span> {String(callPhone)}
+                                    </span>
+                                  ) : null}
+                                  {callDuration != null && Number(callDuration) > 0 && (
+                                    <span className="text-slate-500">
+                                      <span className="text-slate-400">Duration:</span> {String(callDuration)}s
+                                    </span>
+                                  )}
+                                  {msg.event_payload?.contact_name ? (
+                                    <span className="text-slate-500">
+                                      <span className="text-slate-400">Name:</span> {String(msg.event_payload.contact_name)}
+                                    </span>
+                                  ) : null}
+                                </div>
+                              )}
+
+                              {/* Email-specific latest event detail */}
+                              {!isCall && callOutcome && callOutcome !== "SENT" && (
+                                <div className="mt-1.5 text-xs text-slate-400">
+                                  Latest event: <span className="font-medium text-slate-600">{callOutcome}</span>
+                                </div>
                               )}
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -3333,6 +4086,21 @@ export default function App() {
   useEffect(() => {
     loadTokens();
     if (isLoggedIn()) fetchUserFromToken();
+  }, []);
+
+  // Force logout when any API call gets an unrecoverable 401
+  // (e.g. refresh token expired / revoked)
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      handleLogout();
+      // Override the generic "Signed out" toast from handleLogout with a more informative one
+      const id = ++_toastId;
+      setToasts((p) => [...p.filter((t) => t.msg !== "Signed out"), { id, msg: "Session expired — please sign in again.", kind: "error" }]);
+      setTimeout(() => setToasts((p) => p.filter((t) => t.id !== id)), 6000);
+    };
+    window.addEventListener("infynd:unauthorized", handleUnauthorized);
+    return () => window.removeEventListener("infynd:unauthorized", handleUnauthorized);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function fetchUserFromToken() {

@@ -37,6 +37,7 @@ from app.core.database import AsyncSessionLocal
 from app.models.campaign import Campaign
 from app.models.contact import Contact
 from app.models.voice import VoiceCall
+from app.services.language_service import LanguageConfig, resolve_language, DEFAULT_LANG
 
 logger = logging.getLogger(__name__)
 
@@ -56,15 +57,23 @@ _conv_lock = threading.Lock()
 # ---------------------------------------------------------------------------
 
 def create_conversation(call_sid: str, contact: Dict[str, Any], campaign_context: str) -> None:
+    # Resolve language from contact location
+    location = contact.get("location", "")
+    lang = resolve_language(location)
+
     with _conv_lock:
         _conversations[call_sid] = {
             "contact": contact,
             "campaign_context": campaign_context,
+            "language": lang,
             "turns": [],
             "turn_count": 0,
             "created_at": time.time(),
         }
-    logger.info(f"[VoiceAgent] CREATE conv CallSid={call_sid} contact={contact.get('name')}")
+    logger.info(
+        f"[VoiceAgent] CREATE conv CallSid={call_sid} contact={contact.get('name')} "
+        f"location={location!r} → lang={lang.name} ({lang.code})"
+    )
 
 
 def add_turn(call_sid: str, role: str, text: str) -> None:
@@ -82,6 +91,14 @@ def add_turn(call_sid: str, role: str, text: str) -> None:
 def get_conversation(call_sid: str) -> Optional[Dict[str, Any]]:
     with _conv_lock:
         return _conversations.get(call_sid)
+
+
+def get_language(call_sid: str) -> LanguageConfig:
+    """Return the LanguageConfig for a call, or DEFAULT_LANG."""
+    conv = get_conversation(call_sid)
+    if conv and "language" in conv:
+        return conv["language"]
+    return DEFAULT_LANG
 
 
 def remove_conversation(call_sid: str) -> None:
@@ -128,6 +145,7 @@ async def generate_voice_reply(call_sid: str, user_speech: str) -> str:
         return farewell
 
     contact = conv["contact"]
+    lang: LanguageConfig = conv.get("language", DEFAULT_LANG)
     history = "\n".join(
         f"{'Agent' if t['role'] == 'agent' else 'Contact'}: {t['text']}"
         for t in conv["turns"]
@@ -137,6 +155,7 @@ async def generate_voice_reply(call_sid: str, user_speech: str) -> str:
 You are a friendly, professional sales agent on a phone call.
 You are speaking to {contact.get('name', 'the contact')} who works as
 {contact.get('role', 'a professional')} at {contact.get('company', 'their company')}.
+The contact is located in {contact.get('location', 'unknown')}.
 
 Campaign pitch:
 {conv['campaign_context'][:500]}
@@ -144,8 +163,11 @@ Campaign pitch:
 Conversation so far:
 {history}
 
+Language: {lang.llm_instruction}
+
 Rules:
 - Reply in 1-2 short sentences ONLY. This is a phone call.
+- {lang.llm_instruction}
 - Stay on topic. Be polite and professional.
 - Plain speech only — no markdown, no special characters.
 
@@ -181,6 +203,38 @@ def _get_fallback_reply(conv: Dict[str, Any]) -> str:
 
 def _build_farewell(conv: Dict[str, Any]) -> str:
     name = conv["contact"].get("name", "")
+    lang: LanguageConfig = conv.get("language", DEFAULT_LANG)
+
+    # Localised farewell templates for common languages
+    _FAREWELLS = {
+        "hi-IN": f"{'धन्यवाद ' + name + ', ' if name else 'धन्यवाद, '}आपके समय के लिए बहुत शुक्रिया। "
+                  "हम आपको एक फॉलो-अप ईमेल भेजेंगे। आपका दिन शुभ हो! अलविदा।",
+        "ta-IN": f"{'நன்றி ' + name + ', ' if name else 'நன்றி, '}உங்கள் நேரத்திற்கு மிகவும் நன்றி। "
+                  "நாங்கள் உங்களுக்கு ஒரு பின்தொடர்தல் மின்னஞ்சல் அனுப்புவோம்। நல்ல நாள்! நன்றி போய் வருகிறேன்.",
+        "te-IN": f"{'ధన్యవాదాలు ' + name + ', ' if name else 'ధన్యవాదాలు, '}మీ సమయానికి చాలా ధన్యవాదాలు। "
+                  "మేము మీకు ఫాలో-అప్ ఈమెయిల్ పంపుతాము। మంచి రోజు! వెళ్ళొస్తాను.",
+        "kn-IN": f"{'ಧನ್ಯವಾದ ' + name + ', ' if name else 'ಧನ್ಯವಾದ, '}ನಿಮ್ಮ ಸಮಯಕ್ಕೆ ತುಂಬಾ ಧನ್ಯವಾದ। "
+                  "ನಾವು ನಿಮಗೆ ಫಾಲೋ-ಅಪ್ ಇಮೇಲ್ ಕಳುಹಿಸುತ್ತೇವೆ। ಒಳ್ಳೆಯ ದಿನ! ಹೋಗಿ ಬರುತ್ತೇನೆ.",
+        "de-DE": f"Vielen Dank für Ihre Zeit{', ' + name if name else ''}. "
+                  "Wir senden Ihnen eine Nachfass-E-Mail. Einen schönen Tag noch! Auf Wiedersehen.",
+        "fr-FR": f"Merci beaucoup pour votre temps{', ' + name if name else ''}. "
+                  "Nous vous enverrons un e-mail de suivi. Bonne journée ! Au revoir.",
+        "es-ES": f"Muchas gracias por su tiempo{', ' + name if name else ''}. "
+                  "Le enviaremos un correo de seguimiento. ¡Que tenga un buen día! Adiós.",
+        "ar-XA": f"{'شكراً جزيلاً ' + name + '، ' if name else 'شكراً جزيلاً، '}شكراً لوقتك. "
+                  "سنرسل لك بريداً إلكترونياً للمتابعة. يوماً سعيداً! مع السلامة.",
+        "ja-JP": f"{name + '様、' if name else ''}お時間をいただきありがとうございます。"
+                  "フォローアップのメールをお送りいたします。良い一日を！失礼いたします。",
+        "ko-KR": f"{name + '님, ' if name else ''}시간 내주셔서 감사합니다. "
+                  "후속 이메일을 보내드리겠습니다. 좋은 하루 되세요! 안녕히 계세요.",
+        "zh-CN": f"{'谢谢' + name + '，' if name else '谢谢，'}感谢您抽出时间。"
+                  "我们会给您发送跟进邮件。祝您有美好的一天！再见。",
+    }
+
+    if lang.code in _FAREWELLS:
+        return _FAREWELLS[lang.code]
+
+    # Default English farewell
     return (
         f"Thank you so much for your time{', ' + name if name else ''}. "
         "We'll send you a follow-up email with all the details. "
@@ -192,9 +246,76 @@ def _build_farewell(conv: Dict[str, Any]) -> str:
 # Opening pitch
 # ---------------------------------------------------------------------------
 
-def build_opening_pitch(contact: Dict[str, Any], campaign_context: str) -> str:
+def build_opening_pitch(contact: Dict[str, Any], campaign_context: str, lang: Optional[LanguageConfig] = None) -> str:
     name = contact.get("name", "there")
     company = contact.get("company", "your company")
+
+    if lang is None:
+        lang = resolve_language(contact.get("location", ""))
+
+    # Localised opening pitches for common languages
+    _OPENINGS = {
+        "hi-IN": (
+            f"नमस्ते {name}, मैं कैम्पेन आउटरीच टीम से बोल रहा हूं। "
+            f"मैं आपको कॉल कर रहा हूं क्योंकि {company} के लिए हमारे पास एक शानदार अवसर है। "
+            "क्या आपके पास बात करने के लिए कुछ मिनट हैं?"
+        ),
+        "ta-IN": (
+            f"வணக்கம் {name}, நான் கேம்பெயின் அவுட்ரீச் குழுவிலிருந்து பேசுகிறேன். "
+            f"{company}-க்கு ஒரு அருமையான வாய்ப்பு இருப்பதால் உங்களை அழைக்கிறேன். "
+            "உங்களுக்கு சிறிது நேரம் இருக்கிறதா?"
+        ),
+        "te-IN": (
+            f"నమస్కారం {name}, నేను క్యాంపెయిన్ ఆఉట్‌రీచ్ టీమ్ నుండి మాట్లాడుతున్నాను. "
+            f"{company} కోసం మా దగ్గర ఒక గొప్ప అవకాశం ఉంది. "
+            "మీకు కొద్ది సేపు ఉందా?"
+        ),
+        "kn-IN": (
+            f"ನಮಸ್ಕಾರ {name}, ನಾನು ಕ್ಯಾಂಪೇನ್ ಔಟ್‌ರೀಚ್ ತಂಡದಿಂದ ಮಾತನಾಡುತ್ತಿದ್ದೇನೆ. "
+            f"{company} ಗೆ ಒಂದು ಅದ್ಭುತ ಅವಕಾಶವಿದೆ. "
+            "ನಿಮಗೆ ಸ್ವಲ್ಪ ಸಮಯವಿದೆಯೇ?"
+        ),
+        "de-DE": (
+            f"Hallo {name}, hier ist das Kampagnen-Outreach-Team. "
+            f"Ich rufe an, weil wir eine spannende Möglichkeit für {company} haben. "
+            "Haben Sie einen Moment Zeit?"
+        ),
+        "fr-FR": (
+            f"Bonjour {name}, ici l'équipe de campagne. "
+            f"Je vous appelle car nous avons une opportunité passionnante pour {company}. "
+            "Avez-vous un moment pour discuter ?"
+        ),
+        "es-ES": (
+            f"Hola {name}, soy del equipo de campaña. "
+            f"Le llamo porque tenemos una oportunidad emocionante para {company}. "
+            "¿Tiene un momento para hablar?"
+        ),
+        "ar-XA": (
+            f"مرحباً {name}، أنا من فريق التواصل للحملات. "
+            f"أتصل بك لأن لدينا فرصة رائعة لـ {company}. "
+            "هل لديك بضع دقائق للحديث؟"
+        ),
+        "ja-JP": (
+            f"もしもし、{name}様、キャンペーンチームの者です。"
+            f"{company}様に素晴らしい機会がございますのでお電話いたしました。"
+            "少しお時間よろしいでしょうか？"
+        ),
+        "ko-KR": (
+            f"안녕하세요 {name}님, 캠페인 아웃리치 팀입니다. "
+            f"{company}에 좋은 기회가 있어서 연락드렸습니다. "
+            "잠시 통화 가능하시겠습니까?"
+        ),
+        "zh-CN": (
+            f"您好{name}，我是活动推广团队的。"
+            f"我打电话是因为我们为{company}提供了一个很好的机会。"
+            "您现在方便聊聊吗？"
+        ),
+    }
+
+    if lang.code in _OPENINGS:
+        return _OPENINGS[lang.code]
+
+    # Default English
     return (
         f"Hello {name}, this is the campaign outreach team. "
         f"I'm calling because we have an exciting opportunity for {company}. "
@@ -347,6 +468,7 @@ async def call_campaign_contacts(
             "email": contact.email,
             "company": contact.company,
             "role": contact.role,
+            "location": contact.location or "",
         }
 
         try:
