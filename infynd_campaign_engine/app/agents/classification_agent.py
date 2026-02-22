@@ -1,23 +1,89 @@
 """
 Agent 1 — Classification Agent
 Calls Ollama to derive structured targeting filters from campaign context.
+Before calling Ollama, fetches distinct column values from the contacts table
+and injects them as grounding context so the LLM picks values that actually exist.
 Stores result in pipeline_runs.classification_summary.
 Updates pipeline state to CLASSIFIED.
 """
 import json
 import logging
+import time
 from datetime import datetime
 from typing import Dict, Any
 
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
+from sqlalchemy import text, update
 
 from app.core.config import settings
 from app.models.campaign import Campaign, PipelineState
 from app.models.pipeline import PipelineRun, CampaignLog
 
 logger = logging.getLogger(__name__)
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Schema-sample cache — avoids hitting the DB on every campaign run
+#  Values are refreshed at most once per CACHE_TTL_SECONDS (default 1 hour).
+# ─────────────────────────────────────────────────────────────────────────────
+_SCHEMA_CACHE: Dict[str, Any] = {}
+_CACHE_TTL_SECONDS: int = 3600          # 1 hour
+_SAMPLE_LIMIT: int = 80                 # max distinct values fetched per column
+
+# Columns to sample for grounding the LLM prompt
+_SAMPLE_COLUMNS = ["role", "location", "category", "company"]
+
+
+async def _fetch_column_samples(db: AsyncSession) -> Dict[str, list]:
+    """
+    Return distinct non-empty values for each filter column from the contacts table.
+    Results are cached in-process for CACHE_TTL_SECONDS to minimise DB round-trips.
+    """
+    now = time.monotonic()
+    cached_at: float = _SCHEMA_CACHE.get("_ts", 0.0)
+
+    if now - cached_at < _CACHE_TTL_SECONDS and "data" in _SCHEMA_CACHE:
+        logger.debug("[ClassificationAgent] Using cached column samples")
+        return _SCHEMA_CACHE["data"]   # type: ignore[return-value]
+
+    logger.info("[ClassificationAgent] Fetching fresh distinct-value samples from contacts table")
+    samples: Dict[str, list] = {}
+
+    for col in _SAMPLE_COLUMNS:
+        try:
+            rows = await db.execute(
+                text(
+                    f"SELECT DISTINCT {col} FROM contacts "
+                    f"WHERE {col} IS NOT NULL AND TRIM({col}) != '' "
+                    f"ORDER BY {col} LIMIT :lim"
+                ),
+                {"lim": _SAMPLE_LIMIT},
+            )
+            samples[col] = [r[0] for r in rows.fetchall()]
+        except Exception as exc:
+            logger.warning(f"[ClassificationAgent] Could not sample column '{col}': {exc}")
+            samples[col] = []
+
+    _SCHEMA_CACHE["data"] = samples
+    _SCHEMA_CACHE["_ts"] = now
+    return samples
+
+
+def _format_samples(samples: Dict[str, list]) -> str:
+    """Render the column samples into a readable block for the LLM prompt."""
+    lines = []
+    for col in _SAMPLE_COLUMNS:
+        vals = samples.get(col, [])
+        if vals:
+            # Show at most 40 values in the prompt to keep it concise
+            preview = ", ".join(f'"{v}"' for v in vals[:40])
+            if len(vals) > 40:
+                preview += f" … (+{len(vals) - 40} more)"
+            lines.append(f"  {col}: [{preview}]")
+        else:
+            lines.append(f"  {col}: [no data]")
+    return "\n".join(lines)
+
 
 CLASSIFICATION_PROMPT_TEMPLATE = """
 You are a B2B targeting expert. Given the campaign information below, extract structured targeting filters.
@@ -27,21 +93,27 @@ Campaign Information:
 - Campaign Purpose: {campaign_purpose}
 - Target Audience: {target_audience}
 
+Below are the ACTUAL distinct values that exist in the contact database for each filter field.
+You MUST choose values that closely match entries from these lists — do not invent values that are not present.
+
+Available database values:
+{column_samples}
+
 Return a valid JSON object ONLY with no extra text, in exactly this format:
 {{
   "filters": {{
-    "role": "<target job titles/roles like CTO, Engineer, etc. — comma-separated if multiple, or empty string>",
-    "location": "<specific city/country or empty string — do NOT use generic terms like 'global'>",
-    "category": "<industry vertical like Technology, Finance, Healthcare, SaaS, AI, etc. — or empty string>",
-    "company": "<specific target company name — or empty string. Do NOT write descriptions like 'mid-size' or 'enterprise-level'. Only use a concrete company name.>"
+    "role": "<target job titles/roles — pick from the role list above, comma-separated if multiple, or empty string>",
+    "location": "<specific city/country from the location list above — or empty string if not mentioned>",
+    "category": "<industry vertical from the category list above — or empty string>",
+    "company": "<specific target company from the company list above — or empty string. Do NOT write descriptions.>"
   }}
 }}
 
 Rules:
-- role: use concrete job titles (CTO, Developer, Product Manager, etc.)
+- role: choose the closest matching title(s) from the role list; use concrete job titles only
 - company: leave EMPTY unless a specific company name is mentioned as a target
 - location: leave EMPTY unless a specific city/region/country is mentioned
-- category: pick the closest industry vertical
+- category: pick the closest industry vertical from the category list above
 """
 
 
@@ -76,10 +148,15 @@ async def run_classification_agent(
     await db.flush()
 
     try:
+        # ── Fetch distinct column values to ground the LLM (cached for 1 h) ──
+        column_samples = await _fetch_column_samples(db)
+        formatted_samples = _format_samples(column_samples)
+
         prompt = CLASSIFICATION_PROMPT_TEMPLATE.format(
             company=campaign.company or "",
             campaign_purpose=campaign.campaign_purpose or "",
             target_audience=campaign.target_audience or "",
+            column_samples=formatted_samples,
         )
 
         raw_response = await _call_ollama(prompt)

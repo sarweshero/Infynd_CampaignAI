@@ -3082,34 +3082,34 @@ function TrackingView({
     <div className="view-enter space-y-5">
 
       {/* ── HERO HEADER ── */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 p-6 pb-5">
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-white via-slate-50 to-slate-100 border border-slate-200 shadow-sm p-6 pb-5">
         {/* Decorative mesh */}
-        <div className="absolute inset-0 opacity-[0.07]" style={{ backgroundImage: "radial-gradient(circle at 20% 50%, #3b82f6 0%, transparent 50%), radial-gradient(circle at 80% 20%, #8b5cf6 0%, transparent 50%), radial-gradient(circle at 60% 80%, #06b6d4 0%, transparent 50%)" }} />
+        <div className="absolute inset-0 opacity-[0.35]" style={{ backgroundImage: "radial-gradient(circle at 15% 50%, #bfdbfe 0%, transparent 50%), radial-gradient(circle at 85% 15%, #ddd6fe 0%, transparent 50%), radial-gradient(circle at 60% 90%, #a7f3d0 0%, transparent 45%)" }} />
         <div className="relative flex items-start justify-between">
           <div>
             <div className="flex items-center gap-3 mb-1">
-              <h2 className="text-2xl font-extrabold text-white tracking-tight font-display">Event Tracking</h2>
-              <div className="flex items-center gap-1.5 bg-emerald-500/20 backdrop-blur-sm border border-emerald-400/30 rounded-full px-3 py-1">
+              <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight font-display">Event Tracking</h2>
+              <div className="flex items-center gap-1.5 bg-emerald-500/10 backdrop-blur-sm border border-emerald-400/40 rounded-full px-3 py-1">
                 <span className="relative flex h-2 w-2">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
                 </span>
-                <span className="text-[10px] font-bold text-emerald-300 uppercase tracking-widest">Live</span>
+                <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Live</span>
               </div>
             </div>
-            <p className="text-blue-200/70 text-sm">Real-time stream of email, call &amp; LinkedIn engagement events</p>
+            <p className="text-slate-500 text-sm">Real-time stream of email, call &amp; LinkedIn engagement events</p>
           </div>
           <div className="flex items-center gap-3">
             <div className="text-right">
-              <div className="text-[10px] text-blue-300/50 uppercase tracking-wider">Last sync</div>
-              <div className="text-sm text-blue-100 font-mono tabular-nums">{secondsElapsed}s ago</div>
+              <div className="text-[10px] text-slate-400 uppercase tracking-wider">Last sync</div>
+              <div className="text-sm text-slate-600 font-mono tabular-nums">{secondsElapsed}s ago</div>
             </div>
             <button
               onClick={() => setShowSimulator(!showSimulator)}
-              className={`text-xs px-4 py-2 rounded-xl font-medium transition-all backdrop-blur-sm border ${
+              className={`text-xs px-4 py-2 rounded-xl font-medium transition-all border ${
                 showSimulator
-                  ? "bg-blue-500/30 border-blue-400/40 text-blue-200"
-                  : "bg-white/10 border-white/10 text-blue-200 hover:bg-white/20"
+                  ? "bg-blue-100 border-blue-300 text-blue-700"
+                  : "bg-white border-slate-300 text-slate-600 hover:bg-slate-50 hover:border-blue-300 hover:text-blue-600 shadow-sm"
               }`}
             >
               <span className="mr-1.5">{showSimulator ? "▾" : "▸"}</span>
@@ -3121,17 +3121,17 @@ function TrackingView({
         {/* ── STATS RIBBON ── */}
         <div className="relative grid grid-cols-4 lg:grid-cols-8 gap-3 mt-5">
           {[
-            { label: "Total",     value: stats.total,     c: "text-white" },
-            { label: "Delivered", value: stats.delivered,  c: "text-emerald-300" },
-            { label: "Opened",    value: stats.opened,     c: "text-violet-300" },
-            { label: "Clicked",   value: stats.clicked,    c: "text-pink-300" },
-            { label: "Bounced",   value: stats.bounced,    c: "text-red-300" },
-            { label: "Email",     value: stats.email,      c: "text-blue-300" },
-            { label: "Calls",     value: stats.call,       c: "text-indigo-300" },
-            { label: "LinkedIn",  value: stats.linkedin,   c: "text-cyan-300" },
+            { label: "Total",     value: stats.total,     c: "text-slate-800",      lc: "text-slate-400",          bg: "bg-white/70",               border: "border-slate-200" },
+            { label: "Delivered", value: stats.delivered,  c: "text-emerald-600",    lc: "text-emerald-500/70",     bg: "bg-emerald-50/80",          border: "border-emerald-200" },
+            { label: "Opened",    value: stats.opened,     c: "text-violet-600",     lc: "text-violet-500/70",      bg: "bg-violet-50/80",           border: "border-violet-200" },
+            { label: "Clicked",   value: stats.clicked,    c: "text-pink-600",       lc: "text-pink-500/70",        bg: "bg-pink-50/80",             border: "border-pink-200" },
+            { label: "Bounced",   value: stats.bounced,    c: "text-red-600",        lc: "text-red-500/70",         bg: "bg-red-50/80",              border: "border-red-200" },
+            { label: "Email",     value: stats.email,      c: "text-blue-600",       lc: "text-blue-500/70",        bg: "bg-blue-50/80",             border: "border-blue-200" },
+            { label: "Calls",     value: stats.call,       c: "text-indigo-600",     lc: "text-indigo-500/70",      bg: "bg-indigo-50/80",           border: "border-indigo-200" },
+            { label: "LinkedIn",  value: stats.linkedin,   c: "text-cyan-600",       lc: "text-cyan-500/70",        bg: "bg-cyan-50/80",             border: "border-cyan-200" },
           ].map((s) => (
-            <div key={s.label} className="bg-white/[0.06] backdrop-blur-sm rounded-xl px-3 py-2.5 border border-white/[0.06]">
-              <div className="text-[10px] text-blue-200/40 uppercase tracking-wider mb-0.5">{s.label}</div>
+            <div key={s.label} className={`${s.bg} backdrop-blur-sm rounded-xl px-3 py-2.5 border ${s.border} shadow-sm transition-all duration-200 hover:shadow-md hover:scale-[1.02]`}>
+              <div className={`text-[10px] uppercase tracking-wider mb-0.5 ${s.lc}`}>{s.label}</div>
               <div className={`text-lg font-bold font-display tabular-nums ${s.c}`}>{s.value}</div>
             </div>
           ))}
@@ -3139,13 +3139,13 @@ function TrackingView({
       </div>
 
       {/* ── CONTROLS ROW ── */}
-      <div className="flex flex-wrap items-center gap-4">
+      <div className="flex flex-wrap items-center gap-3 bg-white rounded-2xl border border-slate-200 shadow-sm px-4 py-3">
         {/* Campaign selector */}
         <div className="relative">
           <select
             value={selectedId}
             onChange={(e) => setSelectedId(e.target.value)}
-            className="appearance-none bg-white border border-slate-200 rounded-xl pl-4 pr-10 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:border-blue-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all min-w-[220px] cursor-pointer"
+            className="appearance-none bg-slate-50 border border-slate-200 rounded-xl pl-4 pr-10 py-2 text-sm font-medium text-slate-700 hover:border-blue-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all min-w-[220px] cursor-pointer"
           >
             <option value="">All campaigns</option>
             {eligible.map((c) => (
@@ -3157,32 +3157,35 @@ function TrackingView({
           </div>
         </div>
         {selectedCamp && (
-          <span className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200 font-medium">
-            <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
-            {selectedCamp.pipeline_state}
+          <span className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold">
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
+              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+            </span>
+            {selectedCamp.pipeline_state.replace(/_/g, " ")}
           </span>
         )}
 
         {/* Channel filter — segmented control */}
-        <div className="flex bg-slate-100/80 p-1 rounded-xl border border-slate-200/60 ml-auto">
+        <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 ml-auto gap-0.5">
           {channels.map((ch) => {
             const active = channelFilter === ch.key;
             return (
               <button
                 key={ch.key}
                 onClick={() => setChannelFilter(ch.key)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
+                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                   active
-                    ? "bg-white text-blue-700 shadow-sm border border-slate-200 ring-1 ring-blue-100"
-                    : "text-slate-500 hover:text-slate-700 hover:bg-white/50"
+                    ? "bg-white text-blue-700 shadow-md border border-blue-100 ring-1 ring-blue-200/60"
+                    : "text-slate-500 hover:text-slate-700 hover:bg-white/60"
                 }`}
               >
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" width={14} height={14} className={active ? "text-blue-500" : "text-slate-400"}>
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" width={13} height={13} className={active ? "text-blue-500" : "text-slate-400"}>
                   <path strokeLinecap="round" strokeLinejoin="round" d={ch.icon} />
                 </svg>
                 {ch.key}
                 <span className={`min-w-[20px] text-center text-[10px] px-1.5 py-0.5 rounded-full font-bold tabular-nums ${
-                  active ? "bg-blue-100 text-blue-600" : "bg-slate-200/70 text-slate-400"
+                  active ? "bg-blue-600 text-white" : "bg-slate-200/80 text-slate-400"
                 }`}>
                   {ch.count}
                 </span>
@@ -3214,7 +3217,7 @@ function TrackingView({
           ) : (
             <div className="relative max-h-[calc(100vh-22rem)] overflow-y-auto pr-1 -mr-1 scrollbar-thin">
               {/* Timeline spine */}
-              <div className="absolute left-[23px] top-0 bottom-0 w-px bg-gradient-to-b from-blue-200 via-slate-200 to-transparent pointer-events-none" />
+              <div className="absolute left-[23px] top-0 bottom-0 w-0.5 bg-gradient-to-b from-blue-300 via-indigo-200 via-violet-100 to-transparent pointer-events-none rounded-full" />
 
               {((): React.ReactNode => {
                 // Group events by contact_email — latest event per person is first
@@ -3248,23 +3251,23 @@ function TrackingView({
                   const allTypes = evts.map((e) => e.event_type);
 
                   return (
-                    <div key={email} className="relative pl-12 mb-1.5 group">
+                    <div key={email} className="relative pl-12 mb-2 group">
                       {/* Timeline node */}
-                      <div className={`absolute left-[15px] top-4 w-[17px] h-[17px] rounded-full border-2 flex items-center justify-center z-10 transition-all ${
-                        isError ? "bg-red-50 border-red-300"
-                          : isSuccess ? "bg-emerald-50 border-emerald-300"
+                      <div className={`absolute left-[14px] top-[14px] w-[18px] h-[18px] rounded-full border-2 flex items-center justify-center z-10 transition-all shadow-sm ${
+                        isError ? "bg-red-50 border-red-300 shadow-red-100"
+                          : isSuccess ? "bg-emerald-50 border-emerald-400 shadow-emerald-100"
                           : "bg-white border-slate-300"
-                      } ${groupIdx === 0 ? "ring-4 ring-blue-100/60" : ""}`}>
+                      } ${groupIdx === 0 ? "ring-4 ring-blue-100 shadow-blue-100" : ""}`}>
                         <div className={`w-2 h-2 rounded-full ${
-                          isError ? "bg-red-400" : isSuccess ? "bg-emerald-400" : "bg-slate-400"
+                          isError ? "bg-red-400" : isSuccess ? "bg-emerald-500" : "bg-slate-300"
                         }`} />
                       </div>
 
                       {/* ── CONTACT CARD ── */}
-                      <div className={`rounded-xl border transition-all ${
+                      <div className={`rounded-2xl border transition-all duration-200 ${
                         isContactExpanded
-                          ? `bg-white shadow-lg border-slate-200 ring-2 ${meta.ring}`
-                          : "bg-white/80 border-slate-100 hover:bg-white hover:shadow-md hover:border-slate-200"
+                          ? `bg-white shadow-xl border-slate-200 ring-2 ${meta.ring}`
+                          : "bg-white shadow-sm border-slate-150 hover:shadow-md hover:border-slate-200 hover:-translate-y-px"
                       }`}>
 
                         {/* Main row — latest status */}
@@ -3276,7 +3279,7 @@ function TrackingView({
                           }}
                         >
                           {/* Icon */}
-                          <div className={`w-9 h-9 rounded-xl ${meta.bg} flex items-center justify-center shrink-0 transition-transform group-hover:scale-110`}>
+                          <div className={`w-10 h-10 rounded-xl ${meta.bg} flex items-center justify-center shrink-0 transition-all duration-200 group-hover:scale-110 group-hover:shadow-md shadow-sm`}>
                             <EvtIcon type={latest.event_type} size={18} />
                           </div>
 
@@ -3286,10 +3289,10 @@ function TrackingView({
                               <span className={`text-sm font-bold ${meta.color}`}>
                                 {(EVT_SVG[latest.event_type]?.label ?? latest.event_type).toUpperCase()}
                               </span>
-                              <span className={`text-[10px] px-2 py-0.5 rounded-md font-semibold uppercase tracking-wider ${
-                                latest.channel === "Email" ? "bg-blue-50 text-blue-500 border border-blue-100" :
-                                latest.channel === "Call" ? "bg-indigo-50 text-indigo-500 border border-indigo-100" :
-                                "bg-cyan-50 text-cyan-600 border border-cyan-100"
+                              <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                                latest.channel === "Email" ? "bg-blue-100 text-blue-600 border border-blue-200" :
+                                latest.channel === "Call" ? "bg-indigo-100 text-indigo-600 border border-indigo-200" :
+                                "bg-cyan-100 text-cyan-700 border border-cyan-200"
                               }`}>
                                 {latest.channel}
                               </span>
@@ -3313,8 +3316,12 @@ function TrackingView({
 
                           {/* Right — timestamp + event count */}
                           <div className="text-right shrink-0">
-                            <div className="text-[11px] text-slate-400 font-mono tabular-nums">{formatTimestamp(latest.occurred_at)}</div>
-                            <div className="text-[10px] text-slate-300">{evts.length} event{evts.length !== 1 ? "s" : ""}</div>
+                            <div className="text-[11px] text-slate-500 font-mono tabular-nums">{formatTimestamp(latest.occurred_at)}</div>
+                            <div className="text-[10px] text-slate-400 mt-0.5">
+                              <span className="inline-flex items-center gap-1 bg-slate-100 rounded-full px-2 py-0.5 font-semibold">
+                                {evts.length} event{evts.length !== 1 ? "s" : ""}
+                              </span>
+                            </div>
                           </div>
 
                           {/* Expand chevron */}
@@ -3409,7 +3416,7 @@ function TrackingView({
           <div className="w-[340px] shrink-0 space-y-4 animate-in fade-in slide-in-from-right-4">
             <div className="rounded-2xl border border-slate-200 bg-white shadow-lg overflow-hidden">
               {/* Simulator header */}
-              <div className="bg-gradient-to-r from-slate-50 to-blue-50/50 border-b border-slate-100 px-5 py-4">
+              <div className="bg-gradient-to-r from-white via-slate-50 to-blue-50/60 border-b border-slate-100 px-5 py-4">
                 <div className="flex items-center gap-2">
                   <div className="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" width={14} height={14} className="text-blue-600">
