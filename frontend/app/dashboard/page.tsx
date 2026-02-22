@@ -2891,7 +2891,7 @@ function CampaignKanbanCard({
       <div className="text-xs text-slate-400 truncate">{campaign.company ?? "—"}</div>
       <div className="flex items-center justify-between text-[11px] text-slate-400">
         <span>{campaign.platform ?? "email"}</span>
-        <span>{new Date(campaign.created_at).toLocaleDateString()}</span>
+        <span>{fmt(campaign.created_at)}</span>
       </div>
       {badge}
     </button>
@@ -3554,7 +3554,7 @@ function TrackingView({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  History View
+//  History View — Premium Campaign History Explorer
 // ─────────────────────────────────────────────────────────────────────────────
 function HistoryView({
   campaigns,
@@ -3572,6 +3572,10 @@ function HistoryView({
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [messages, setMessages] = useState<MessageEntry[]>([]);
   const [loading, setLoading] = useState(false);
+  const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
+  const [expandedContact, setExpandedContact] = useState<string | null>(null);
+  const [expandedMsgId, setExpandedMsgId] = useState<string | null>(null);
+  const [campSearch, setCampSearch] = useState("");
 
   useEffect(() => {
     if (!selectedId) return;
@@ -3591,37 +3595,168 @@ function HistoryView({
     })();
   }, [selectedId, tab]);
 
-  const STATUS_COLORS: Record<string, string> = {
-    SUCCESS:      "bg-emerald-50 text-emerald-700 border border-emerald-200",
-    RUNNING:      "bg-blue-50 text-blue-700 border border-blue-200",
-    FAILED:       "bg-red-50 text-red-700 border border-red-200",
-    SENT:         "bg-emerald-50 text-emerald-700 border border-emerald-200",
-    PENDING:      "bg-slate-100 text-slate-500 border border-slate-200",
-    FAILED_SEND:  "bg-red-50 text-red-700 border border-red-200",
+  const LOG_STATUS_META: Record<string, { icon: string; color: string; bg: string; ring: string; dot: string }> = {
+    SUCCESS:     { icon: "M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z",       color: "text-emerald-500", bg: "bg-emerald-50",  ring: "ring-emerald-200", dot: "bg-emerald-400" },
+    RUNNING:     { icon: "M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182", color: "text-blue-500",    bg: "bg-blue-50",     ring: "ring-blue-200",    dot: "bg-blue-400" },
+    FAILED:      { icon: "m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z", color: "text-red-500",     bg: "bg-red-50",      ring: "ring-red-200",     dot: "bg-red-400" },
+    SENT:        { icon: "M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z", color: "text-emerald-500", bg: "bg-emerald-50", ring: "ring-emerald-200", dot: "bg-emerald-400" },
+    PENDING:     { icon: "M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z",                      color: "text-slate-400",   bg: "bg-slate-50",    ring: "ring-slate-200",   dot: "bg-slate-300" },
+    FAILED_SEND: { icon: "m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z", color: "text-red-500",     bg: "bg-red-50",      ring: "ring-red-200",     dot: "bg-red-400" },
+  };
+
+  const OUTCOME_STYLES: Record<string, string> = {
+    ANSWERED:    "bg-emerald-50 text-emerald-700 border border-emerald-200",
+    BUSY:        "bg-amber-50 text-amber-700 border border-amber-200",
+    NO_ANSWER:   "bg-orange-50 text-orange-700 border border-orange-200",
+    FAILED:      "bg-red-50 text-red-700 border border-red-200",
+    CANCELED:    "bg-slate-100 text-slate-500 border border-slate-200",
+    RINGING:     "bg-blue-50 text-blue-600 border border-blue-200",
+    IN_PROGRESS: "bg-blue-50 text-blue-600 border border-blue-200",
+    DELIVERED:   "bg-cyan-50 text-cyan-700 border border-cyan-200",
+    OPENED:      "bg-violet-50 text-violet-700 border border-violet-200",
+    CLICKED:     "bg-pink-50 text-pink-700 border border-pink-200",
+    BOUNCED:     "bg-red-50 text-red-600 border border-red-200",
+  };
+
+  const CHANNEL_SVG: Record<string, { d: string; color: string; bg: string }> = {
+    Email:    { d: "M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75", color: "text-blue-500",   bg: "bg-blue-50" },
+    Call:     { d: "M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z", color: "text-indigo-500", bg: "bg-indigo-50" },
+    LinkedIn: { d: "M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z", color: "text-cyan-600",   bg: "bg-cyan-50" },
   };
 
   const selectedCamp = campaigns.find((c) => c.id === selectedId) ?? null;
 
+  // Stats
+  const logStats = {
+    total: logs.length,
+    success: logs.filter((l) => l.status === "SUCCESS").length,
+    failed: logs.filter((l) => l.status === "FAILED" || l.status === "FAILED_SEND").length,
+    running: logs.filter((l) => l.status === "RUNNING").length,
+  };
+  const msgStats = {
+    total: messages.length,
+    email: messages.filter((m) => m.channel === "Email").length,
+    call: messages.filter((m) => m.channel === "Call").length,
+    linkedin: messages.filter((m) => m.channel === "LinkedIn").length,
+  };
+
+  // Filter campaigns by search
+  const filteredCamps = campSearch
+    ? campaigns.filter((c) =>
+        c.name.toLowerCase().includes(campSearch.toLowerCase()) ||
+        (c.company ?? "").toLowerCase().includes(campSearch.toLowerCase())
+      )
+    : campaigns;
+
+  // Group messages by contact for the messages tab
+  const msgGroups = new Map<string, MessageEntry[]>();
+  messages.forEach((m) => {
+    if (!msgGroups.has(m.contact_email)) msgGroups.set(m.contact_email, []);
+    msgGroups.get(m.contact_email)!.push(m);
+  });
+  const contactList = Array.from(msgGroups.entries());
+
+  const tabs = [
+    { key: "logs" as const, label: "Execution Logs", icon: "M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 0 1 0 3.75H5.625a1.875 1.875 0 0 1 0-3.75Z", count: logs.length },
+    { key: "messages" as const, label: "Sent Messages", icon: "M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z", count: messages.length },
+  ];
+
   return (
-    <div className="view-enter space-y-6">
-      <div>
-        <h2 className="text-xl font-bold text-slate-900 font-display">History</h2>
-        <p className="text-slate-500 text-sm">Select a campaign to view execution logs and sent messages</p>
+    <div className="view-enter space-y-5">
+
+      {/* ── HERO HEADER ── */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900 p-6 pb-5">
+        {/* Decorative mesh */}
+        <div className="absolute inset-0 opacity-[0.07]" style={{ backgroundImage: "radial-gradient(circle at 25% 40%, #6366f1 0%, transparent 50%), radial-gradient(circle at 75% 25%, #8b5cf6 0%, transparent 50%), radial-gradient(circle at 50% 80%, #06b6d4 0%, transparent 50%)" }} />
+        <div className="relative flex items-start justify-between">
+          <div>
+            <div className="flex items-center gap-3 mb-1">
+              <h2 className="text-2xl font-extrabold text-white tracking-tight font-display">Campaign History</h2>
+              <div className="flex items-center gap-1.5 bg-indigo-500/20 backdrop-blur-sm border border-indigo-400/30 rounded-full px-3 py-1">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" width={12} height={12} className="text-indigo-300">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                </svg>
+                <span className="text-[10px] font-bold text-indigo-300 uppercase tracking-widest">{campaigns.length} Campaigns</span>
+              </div>
+            </div>
+            <p className="text-indigo-200/60 text-sm">Explore execution logs, sent messages &amp; delivery status across all campaigns</p>
+          </div>
+          <div className="flex items-center gap-2">
+            {selectedCamp && (
+              <>
+                <button
+                  onClick={() => onSelect(selectedCamp)}
+                  className="text-xs px-4 py-2 rounded-xl font-medium transition-all backdrop-blur-sm border bg-white/10 border-white/10 text-indigo-200 hover:bg-white/20"
+                >
+                  View Details
+                </button>
+                {selectedCamp.pipeline_state === "AWAITING_APPROVAL" && (
+                  <button
+                    onClick={() => onApproval(selectedCamp)}
+                    className="text-xs px-4 py-2 rounded-xl font-medium transition-all backdrop-blur-sm border bg-amber-500/20 border-amber-400/30 text-amber-200 hover:bg-amber-500/30"
+                  >
+                    Review Approval
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* ── STATS RIBBON ── */}
+        <div className="relative grid grid-cols-4 lg:grid-cols-7 gap-3 mt-5">
+          {[
+            { label: "Total Logs",  value: logStats.total,   c: "text-white" },
+            { label: "Successful",  value: logStats.success, c: "text-emerald-300" },
+            { label: "Failed",      value: logStats.failed,  c: "text-red-300" },
+            { label: "Messages",    value: msgStats.total,   c: "text-white" },
+            { label: "Email",       value: msgStats.email,   c: "text-blue-300" },
+            { label: "Calls",       value: msgStats.call,    c: "text-indigo-300" },
+            { label: "LinkedIn",    value: msgStats.linkedin, c: "text-cyan-300" },
+          ].map((s) => (
+            <div key={s.label} className="bg-white/[0.06] backdrop-blur-sm rounded-xl px-3 py-2.5 border border-white/[0.06]">
+              <div className="text-[10px] text-indigo-200/40 uppercase tracking-wider mb-0.5">{s.label}</div>
+              <div className={`text-lg font-bold font-display tabular-nums ${s.c}`}>{s.value}</div>
+            </div>
+          ))}
+        </div>
       </div>
 
-      <div className="flex gap-6 items-start">
-        <div className="w-64 xl:w-80 shrink-0">
-          <div className="text-xs text-slate-400 uppercase tracking-wider mb-3">
-            Campaigns ({campaigns.length})
+      {/* ── MAIN LAYOUT: Sidebar + Content ── */}
+      <div className="flex gap-5 items-start">
+
+        {/* ── CAMPAIGN SIDEBAR ── */}
+        <div className="w-72 xl:w-80 shrink-0">
+          {/* Search */}
+          <div className="relative mb-3">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" width={14} height={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+              <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+            </svg>
+            <input
+              value={campSearch}
+              onChange={(e) => setCampSearch(e.target.value)}
+              placeholder="Search campaigns…"
+              className="w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-2.5 text-xs text-slate-700 placeholder:text-slate-300 shadow-sm focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 transition-all"
+            />
           </div>
-          {campaigns.length === 0 ? (
-            <div className="card p-8 text-center">
-              <div className="text-3xl mb-2">▤</div>
-              <div className="text-slate-400 text-sm">No campaigns yet</div>
+
+          <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-2 font-semibold px-1">
+            {filteredCamps.length} campaign{filteredCamps.length !== 1 ? "s" : ""}
+          </div>
+
+          {filteredCamps.length === 0 ? (
+            <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-gradient-to-b from-white to-slate-50 py-10 text-center">
+              <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center mx-auto mb-3">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor" width={24} height={24} className="text-slate-300">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 13.5h3.86a2.25 2.25 0 0 1 2.012 1.244l.256.512a2.25 2.25 0 0 0 2.013 1.244h2.21a2.25 2.25 0 0 0 2.013-1.244l.256-.512a2.25 2.25 0 0 1 2.013-1.244h3.859m-19.5.338V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18v-4.162c0-.224-.034-.447-.1-.661L19.24 5.338a2.25 2.25 0 0 0-2.15-1.588H6.911a2.25 2.25 0 0 0-2.15 1.588L2.35 13.177a2.25 2.25 0 0 0-.1.661Z" />
+                </svg>
+              </div>
+              <div className="text-slate-500 font-semibold text-sm">No campaigns found</div>
+              <div className="text-slate-400 text-xs mt-1">{campSearch ? "Try a different search" : "Create your first campaign"}</div>
             </div>
           ) : (
-            <div className="flex flex-col gap-3 max-h-[calc(100vh-14rem)] overflow-y-auto pr-1">
-              {campaigns.map((c) => {
+            <div className="flex flex-col gap-2.5 max-h-[calc(100vh-22rem)] overflow-y-auto pr-1 -mr-1 scrollbar-thin">
+              {filteredCamps.map((c) => {
                 const logCount = c.id === selectedId && tab === "logs" ? logs.length : null;
                 const msgCount = c.id === selectedId && tab === "messages" ? messages.length : null;
                 return (
@@ -3629,10 +3764,13 @@ function HistoryView({
                     key={c.id}
                     campaign={c}
                     selected={c.id === selectedId}
-                    onSelect={() => setSelectedId(c.id)}
+                    onSelect={() => { setSelectedId(c.id); setExpandedLogId(null); setExpandedContact(null); setExpandedMsgId(null); }}
                     badge={
                       (logCount !== null || msgCount !== null) && (
-                        <div className="text-[11px] text-slate-400 mt-1">
+                        <div className="flex items-center gap-1.5 text-[10px] text-slate-400 mt-1">
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" width={10} height={10} className="text-slate-300">
+                            <path strokeLinecap="round" strokeLinejoin="round" d={logCount !== null ? "M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 0 1 0 3.75H5.625a1.875 1.875 0 0 1 0-3.75Z" : "M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z"} />
+                          </svg>
                           {logCount !== null ? `${logCount} logs` : `${msgCount} messages`}
                         </div>
                       )
@@ -3644,193 +3782,436 @@ function HistoryView({
           )}
         </div>
 
+        {/* ── MAIN CONTENT ── */}
         <div className="flex-1 min-w-0">
           {!selectedId ? (
-            <div className="card p-12 text-center">
-              <div className="text-slate-300 text-sm">Select a campaign</div>
+            <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-gradient-to-b from-white to-slate-50 py-20 text-center">
+              <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor" width={32} height={32} className="text-slate-300">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.042 21.672 13.684 16.6m0 0-2.51 2.225.569-9.47 5.227 7.917-3.286-.672Zm-7.518-.267A8.25 8.25 0 1 1 20.25 10.5M8.288 14.212A5.25 5.25 0 1 1 17.25 10.5" />
+                </svg>
+              </div>
+              <div className="text-slate-500 font-semibold text-sm mb-1">Select a campaign</div>
+              <div className="text-slate-400 text-xs max-w-xs mx-auto">Choose a campaign from the sidebar to explore its execution history</div>
             </div>
           ) : (
             <>
+              {/* ── Selected Campaign Header ── */}
               {selectedCamp && (
-                <div className="mb-4 flex items-center justify-between gap-3">
-                  <div>
-                    <h3 className="font-semibold text-slate-800">{selectedCamp.name}</h3>
-                    <p className="text-xs text-slate-400 mt-0.5">{selectedCamp.company} · {fmt(selectedCamp.created_at)}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => onSelect(selectedCamp)}
-                      className="btn-ghost text-xs px-3 py-1.5"
-                    >
-                      View
-                    </button>
-                    {selectedCamp.pipeline_state === "AWAITING_APPROVAL" && (
-                      <button
-                        onClick={() => onApproval(selectedCamp)}
-                        className="btn-warning text-xs px-3 py-1.5"
-                      >
-                        Review Approval
-                      </button>
-                    )}
+                <div className="rounded-xl bg-gradient-to-r from-slate-50 to-indigo-50/30 border border-slate-200 p-4 mb-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" width={20} height={20} className="text-indigo-600">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 0 0 6 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0 1 18 16.5h-2.25m-7.5 0h7.5m-7.5 0-1 3m8.5-3 1 3m0 0 .5 1.5m-.5-1.5h-9.5m0 0-.5 1.5M9 11.25v1.5M12 9v3.75m3-6v6" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-slate-800 text-sm">{selectedCamp.name}</h3>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-xs text-slate-400">{selectedCamp.company ?? "—"}</span>
+                          <span className="text-slate-200">·</span>
+                          <span className="text-xs text-slate-400">{fmt(selectedCamp.created_at)}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <span className={`text-[11px] px-2.5 py-1 rounded-full font-medium ${stateColor(selectedCamp.pipeline_state)}`}>
+                      {selectedCamp.pipeline_state.replace(/_/g, " ")}
+                    </span>
                   </div>
                 </div>
               )}
 
-              <div className="flex gap-1 bg-slate-100 p-1 rounded-xl mb-4 w-fit">
-                {(["logs","messages"] as const).map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => setTab(t)}
-                    className={`px-4 py-2 rounded-lg text-xs font-medium transition-all capitalize ${
-                      tab === t
-                        ? "bg-white text-blue-700 shadow-sm border border-slate-200"
-                        : "text-slate-500 hover:text-slate-700"
-                    }`}
-                  >
-                    {t}
-                  </button>
-                ))}
+              {/* ── Tab Control ── */}
+              <div className="flex bg-slate-100/80 p-1 rounded-xl border border-slate-200/60 mb-4 w-fit">
+                {tabs.map((t) => {
+                  const active = tab === t.key;
+                  return (
+                    <button
+                      key={t.key}
+                      onClick={() => setTab(t.key)}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
+                        active
+                          ? "bg-white text-indigo-700 shadow-sm border border-slate-200 ring-1 ring-indigo-100"
+                          : "text-slate-500 hover:text-slate-700 hover:bg-white/50"
+                      }`}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" width={14} height={14} className={active ? "text-indigo-500" : "text-slate-400"}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d={t.icon} />
+                      </svg>
+                      {t.label}
+                      <span className={`min-w-[20px] text-center text-[10px] px-1.5 py-0.5 rounded-full font-bold tabular-nums ${
+                        active ? "bg-indigo-100 text-indigo-600" : "bg-slate-200/70 text-slate-400"
+                      }`}>
+                        {t.count}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
 
+              {/* ── Content ── */}
               {loading ? (
-                <div className="flex flex-col items-center py-12 gap-3">
-                  <div className="loader-orbit" />
+                <div className="py-20 flex flex-col items-center justify-center gap-4">
+                  <div className="loader-page-ring" />
                   <span className="text-slate-400 text-sm">Loading {tab}…</span>
                 </div>
               ) : tab === "logs" ? (
-                <div className="card overflow-hidden">
-                  <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-                    <h3 className="font-semibold text-slate-800 text-sm">Execution Logs</h3>
-                    <span className="text-xs text-slate-400">{logs.length} entries</span>
-                  </div>
-                  {logs.length === 0 ? (
-                    <div className="py-12 text-center text-slate-400 text-sm">No logs found</div>
-                  ) : (
-                    <div className="divide-y divide-slate-50 max-h-[420px] overflow-y-auto">
-                      {logs.map((log) => (
-                        <div key={log.id} className="px-5 py-3 flex items-start gap-3">
-                          <span className={`shrink-0 text-[11px] px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[log.status] ?? "bg-slate-100 text-slate-500"}`}>
-                            {log.status}
-                          </span>
-                          <div className="flex-1 min-w-0">
-                            <div className="text-xs text-slate-500 mb-0.5">{fmt((log as any).started_at || (log as any).timestamp)}</div>
-                            <div className="text-sm text-slate-700">{(log as any).agent_name || "—"}</div>
-                            {(log as any).duration_ms && <div className="text-xs text-slate-400 mt-0.5">{(log as any).duration_ms}ms</div>}
-                            {log.error_message && <div className="text-xs text-red-500 mt-0.5">{log.error_message}</div>}
-                          </div>
-                        </div>
-                      ))}
+                /* ── LOGS TAB — Timeline Layout ── */
+                logs.length === 0 ? (
+                  <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-gradient-to-b from-white to-slate-50 py-16 text-center">
+                    <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-3">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor" width={28} height={28} className="text-slate-300">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 0 1 0 3.75H5.625a1.875 1.875 0 0 1 0-3.75Z" />
+                      </svg>
                     </div>
-                  )}
-                </div>
-              ) : (
-                <div className="card overflow-hidden">
-                  <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-                    <h3 className="font-semibold text-slate-800 text-sm">Sent Messages</h3>
-                    <span className="text-xs text-slate-400">{messages.length} total</span>
+                    <div className="text-slate-500 font-semibold text-sm">No execution logs</div>
+                    <div className="text-slate-400 text-xs mt-1">Logs appear as the campaign pipeline runs</div>
                   </div>
-                  {messages.length === 0 ? (
-                    <div className="py-12 text-center text-slate-400 text-sm">No messages sent yet</div>
-                  ) : (
-                    <div className="divide-y divide-slate-50 max-h-[420px] overflow-y-auto">
-                      {messages.map((msg) => {
-                        const isCall = msg.channel === "Call";
-                        const isLinkedIn = msg.channel === "LinkedIn";
-                        const callOutcome = msg.latest_event;
-                        const callDuration = msg.event_payload?.duration_seconds;
-                        const callPhone = msg.event_payload?.contact_phone;
+                ) : (
+                  <div className="relative max-h-[calc(100vh-24rem)] overflow-y-auto pr-1 -mr-1 scrollbar-thin">
+                    {/* Timeline spine */}
+                    <div className="absolute left-[23px] top-0 bottom-0 w-px bg-gradient-to-b from-indigo-200 via-slate-200 to-transparent pointer-events-none" />
 
-                        const OUTCOME_STYLES: Record<string, string> = {
-                          ANSWERED:  "bg-emerald-50 text-emerald-700 border border-emerald-200",
-                          BUSY:      "bg-amber-50 text-amber-700 border border-amber-200",
-                          NO_ANSWER: "bg-orange-50 text-orange-700 border border-orange-200",
-                          FAILED:    "bg-red-50 text-red-700 border border-red-200",
-                          CANCELED:  "bg-slate-100 text-slate-500 border border-slate-200",
-                          RINGING:   "bg-blue-50 text-blue-600 border border-blue-200",
-                          IN_PROGRESS: "bg-blue-50 text-blue-600 border border-blue-200",
-                          DELIVERED: "bg-cyan-50 text-cyan-700 border border-cyan-200",
-                          OPENED:    "bg-violet-50 text-violet-700 border border-violet-200",
-                          CLICKED:   "bg-pink-50 text-pink-700 border border-pink-200",
-                          BOUNCED:   "bg-red-50 text-red-600 border border-red-200",
-                        };
+                    {logs.map((log, idx) => {
+                      const meta = LOG_STATUS_META[log.status] ?? LOG_STATUS_META.PENDING;
+                      const isExpanded = expandedLogId === log.id;
+                      const isError = log.status === "FAILED" || log.status === "FAILED_SEND";
+                      const isSuccess = log.status === "SUCCESS" || log.status === "SENT";
 
-                        const CHANNEL_ICONS: Record<string, string> = {
-                          Email: "✉",
-                          Call: "📞",
-                          LinkedIn: "🔗",
-                        };
+                      return (
+                        <div key={log.id} className="relative pl-12 mb-1.5 group">
+                          {/* Timeline node */}
+                          <div className={`absolute left-[15px] top-4 w-[17px] h-[17px] rounded-full border-2 flex items-center justify-center z-10 transition-all ${
+                            isError ? "bg-red-50 border-red-300"
+                              : isSuccess ? "bg-emerald-50 border-emerald-300"
+                              : log.status === "RUNNING" ? "bg-blue-50 border-blue-300"
+                              : "bg-white border-slate-300"
+                          } ${idx === 0 ? "ring-4 ring-indigo-100/60" : ""}`}>
+                            <div className={`w-2 h-2 rounded-full ${meta.dot} ${log.status === "RUNNING" ? "animate-pulse" : ""}`} />
+                          </div>
 
-                        return (
-                          <div key={msg.id} className="px-5 py-4 flex items-start gap-4">
-                            {/* Channel icon */}
-                            <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-base shrink-0 ${
-                              isCall ? "bg-indigo-50" : isLinkedIn ? "bg-blue-50" : "bg-sky-50"
-                            }`}>
-                              {CHANNEL_ICONS[msg.channel] ?? "📨"}
-                            </div>
+                          {/* Log card */}
+                          <div className={`rounded-xl border transition-all cursor-pointer ${
+                            isExpanded
+                              ? `bg-white shadow-lg border-slate-200 ring-2 ${meta.ring}`
+                              : "bg-white/80 border-slate-100 hover:bg-white hover:shadow-md hover:border-slate-200"
+                          }`}
+                            onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
+                          >
+                            <div className="flex items-center gap-3 px-4 py-3">
+                              {/* Icon */}
+                              <div className={`w-9 h-9 rounded-xl ${meta.bg} flex items-center justify-center shrink-0 transition-transform group-hover:scale-110`}>
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" width={18} height={18} className={meta.color}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d={meta.icon} />
+                                </svg>
+                              </div>
 
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-sm font-medium text-slate-800">{msg.contact_email}</span>
-                                <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${
-                                  isCall ? "bg-indigo-50 text-indigo-600 border border-indigo-100" :
-                                  isLinkedIn ? "bg-blue-50 text-blue-600 border border-blue-100" :
-                                  "bg-sky-50 text-sky-600 border border-sky-100"
-                                }`}>
-                                  {msg.channel}
-                                </span>
-                                <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[msg.send_status] ?? "bg-slate-100 text-slate-500"}`}>
-                                  {msg.send_status}
-                                </span>
-                                {/* Latest event badge */}
-                                {callOutcome && (
-                                  <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${OUTCOME_STYLES[callOutcome] ?? "bg-slate-100 text-slate-500 border border-slate-200"}`}>
-                                    {callOutcome.replace(/_/g, " ")}
+                              {/* Content */}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className={`text-sm font-bold ${meta.color}`}>{log.status}</span>
+                                  <span className="text-[10px] px-2 py-0.5 rounded-md font-semibold bg-slate-50 text-slate-500 border border-slate-100 uppercase tracking-wider">
+                                    {log.agent_name || "System"}
                                   </span>
-                                )}
-                              </div>
-
-                              <div className="flex items-center gap-3 mt-1 text-xs text-slate-400 flex-wrap">
-                                {msg.sent_at && <span>{fmt(msg.sent_at)}</span>}
-                                {msg.provider_message_id && (
-                                  <span className="font-mono text-slate-300">{msg.provider_message_id.slice(0, 20)}…</span>
-                                )}
-                              </div>
-
-                              {/* Call-specific details */}
-                              {isCall && msg.event_payload && (
-                                <div className="mt-2 flex items-center gap-4 text-xs">
-                                  {callPhone ? (
-                                    <span className="text-slate-500">
-                                      <span className="text-slate-400">Phone:</span> {String(callPhone)}
-                                    </span>
-                                  ) : null}
-                                  {callDuration != null && Number(callDuration) > 0 && (
-                                    <span className="text-slate-500">
-                                      <span className="text-slate-400">Duration:</span> {String(callDuration)}s
+                                  {log.duration_ms != null && (
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-500 font-semibold tabular-nums">
+                                      {log.duration_ms}ms
                                     </span>
                                   )}
-                                  {msg.event_payload?.contact_name ? (
-                                    <span className="text-slate-500">
-                                      <span className="text-slate-400">Name:</span> {String(msg.event_payload.contact_name)}
-                                    </span>
-                                  ) : null}
                                 </div>
-                              )}
+                                {log.error_message && (
+                                  <div className="text-xs text-red-500 mt-0.5 truncate">{log.error_message}</div>
+                                )}
+                              </div>
 
-                              {/* Email-specific latest event detail */}
-                              {!isCall && callOutcome && callOutcome !== "SENT" && (
-                                <div className="mt-1.5 text-xs text-slate-400">
-                                  Latest event: <span className="font-medium text-slate-600">{callOutcome}</span>
-                                </div>
-                              )}
+                              {/* Timestamp */}
+                              <div className="text-right shrink-0">
+                                <div className="text-[11px] text-slate-400 font-mono tabular-nums">{formatTimestamp(log.started_at)}</div>
+                                <div className="text-[10px] text-slate-300">{relativeTime(log.started_at)}</div>
+                              </div>
+
+                              {/* Chevron */}
+                              <svg xmlns="http://www.w3.org/2000/svg" width={14} height={14} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"
+                                className={`text-slate-300 transition-transform shrink-0 ${isExpanded ? "rotate-180" : ""}`}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                              </svg>
                             </div>
+
+                            {/* Expanded detail */}
+                            {isExpanded && (
+                              <div className="border-t border-slate-100 px-4 pb-3 pt-2 space-y-2 animate-in fade-in slide-in-from-top-1">
+                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                                  <div className="bg-slate-50 rounded-lg p-2.5">
+                                    <div className="text-[9px] text-slate-400 uppercase tracking-wider mb-0.5">Log ID</div>
+                                    <div className="text-[11px] text-slate-600 font-mono">{log.id.slice(0, 16)}…</div>
+                                  </div>
+                                  <div className="bg-slate-50 rounded-lg p-2.5">
+                                    <div className="text-[9px] text-slate-400 uppercase tracking-wider mb-0.5">Agent</div>
+                                    <div className="text-[11px] text-slate-700 font-semibold">{log.agent_name || "—"}</div>
+                                  </div>
+                                  <div className="bg-slate-50 rounded-lg p-2.5">
+                                    <div className="text-[9px] text-slate-400 uppercase tracking-wider mb-0.5">Started</div>
+                                    <div className="text-[11px] text-slate-600 font-mono">{formatTimestamp(log.started_at)}</div>
+                                  </div>
+                                  <div className="bg-slate-50 rounded-lg p-2.5">
+                                    <div className="text-[9px] text-slate-400 uppercase tracking-wider mb-0.5">Completed</div>
+                                    <div className="text-[11px] text-slate-600 font-mono">{log.completed_at ? formatTimestamp(log.completed_at) : "—"}</div>
+                                  </div>
+                                </div>
+                                {log.duration_ms != null && (
+                                  <div className="bg-slate-50 rounded-lg p-2.5">
+                                    <div className="text-[9px] text-slate-400 uppercase tracking-wider mb-1">Duration</div>
+                                    <div className="flex items-center gap-2">
+                                      <div className="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                                        <div className={`h-full rounded-full ${isError ? "bg-red-400" : "bg-indigo-400"}`} style={{ width: `${Math.min((log.duration_ms / Math.max(...logs.map((l) => l.duration_ms ?? 0), 1)) * 100, 100)}%` }} />
+                                      </div>
+                                      <span className="text-[11px] text-slate-600 font-mono font-bold tabular-nums">{log.duration_ms}ms</span>
+                                    </div>
+                                  </div>
+                                )}
+                                {log.error_message && (
+                                  <div className="bg-red-50 border border-red-100 rounded-lg p-2.5">
+                                    <div className="text-[9px] text-red-400 uppercase tracking-wider mb-0.5">Error</div>
+                                    <div className="text-xs text-red-600">{log.error_message}</div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
-                        );
-                      })}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )
+              ) : (
+                /* ── MESSAGES TAB — Grouped by Contact ── */
+                messages.length === 0 ? (
+                  <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-gradient-to-b from-white to-slate-50 py-16 text-center">
+                    <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-3">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1} stroke="currentColor" width={28} height={28} className="text-slate-300">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
+                      </svg>
                     </div>
-                  )}
-                </div>
+                    <div className="text-slate-500 font-semibold text-sm">No messages sent</div>
+                    <div className="text-slate-400 text-xs mt-1">Messages appear after the campaign dispatches</div>
+                  </div>
+                ) : (
+                  <div className="relative max-h-[calc(100vh-24rem)] overflow-y-auto pr-1 -mr-1 scrollbar-thin">
+                    {/* Timeline spine */}
+                    <div className="absolute left-[23px] top-0 bottom-0 w-px bg-gradient-to-b from-indigo-200 via-slate-200 to-transparent pointer-events-none" />
+
+                    {contactList.map(([email, msgs], groupIdx) => {
+                      const latest = msgs[0];
+                      const chMeta = CHANNEL_SVG[latest.channel] ?? CHANNEL_SVG.Email;
+                      const isContactExpanded = expandedContact === email;
+                      const latestEvt = latest.latest_event;
+                      const evtMeta = latestEvt ? (EVT_SVG[latestEvt] ?? EVT_SVG.SENT) : null;
+                      const isError = latest.send_status === "FAILED" || latest.send_status === "FAILED_SEND";
+                      const isSuccess = latest.send_status === "SENT" || latest.send_status === "SUCCESS";
+
+                      // Collect all unique channels across messages for this contact
+                      const channelSet = new Set(msgs.map((m) => m.channel));
+
+                      return (
+                        <div key={email} className="relative pl-12 mb-1.5 group">
+                          {/* Timeline node */}
+                          <div className={`absolute left-[15px] top-4 w-[17px] h-[17px] rounded-full border-2 flex items-center justify-center z-10 transition-all ${
+                            isError ? "bg-red-50 border-red-300"
+                              : isSuccess ? "bg-emerald-50 border-emerald-300"
+                              : "bg-white border-slate-300"
+                          } ${groupIdx === 0 ? "ring-4 ring-indigo-100/60" : ""}`}>
+                            <div className={`w-2 h-2 rounded-full ${
+                              isError ? "bg-red-400" : isSuccess ? "bg-emerald-400" : "bg-slate-400"
+                            }`} />
+                          </div>
+
+                          {/* Contact card */}
+                          <div className={`rounded-xl border transition-all ${
+                            isContactExpanded
+                              ? `bg-white shadow-lg border-slate-200 ring-2 ${evtMeta?.ring ?? "ring-slate-200"}`
+                              : "bg-white/80 border-slate-100 hover:bg-white hover:shadow-md hover:border-slate-200"
+                          }`}>
+
+                            {/* Main row */}
+                            <div
+                              className="flex items-center gap-3 px-4 py-3 cursor-pointer"
+                              onClick={() => { setExpandedContact(isContactExpanded ? null : email); setExpandedMsgId(null); }}
+                            >
+                              {/* Channel icon */}
+                              <div className={`w-9 h-9 rounded-xl ${chMeta.bg} flex items-center justify-center shrink-0 transition-transform group-hover:scale-110`}>
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" width={18} height={18} className={chMeta.color}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d={chMeta.d} />
+                                </svg>
+                              </div>
+
+                              {/* Content */}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-sm font-bold text-slate-800 truncate">{email}</span>
+                                  {/* Channel pills */}
+                                  {Array.from(channelSet).map((ch) => (
+                                    <span key={ch} className={`text-[10px] px-2 py-0.5 rounded-md font-semibold uppercase tracking-wider ${
+                                      ch === "Email" ? "bg-blue-50 text-blue-500 border border-blue-100" :
+                                      ch === "Call" ? "bg-indigo-50 text-indigo-500 border border-indigo-100" :
+                                      "bg-cyan-50 text-cyan-600 border border-cyan-100"
+                                    }`}>
+                                      {ch}
+                                    </span>
+                                  ))}
+                                  {/* Status pills */}
+                                  {msgs.slice(0, 4).map((m, mi) => {
+                                    const e = m.latest_event ? (EVT_SVG[m.latest_event] ?? EVT_SVG.SENT) : null;
+                                    return e ? (
+                                      <span key={mi} className={`text-[9px] px-1.5 py-0.5 rounded font-semibold ${e.bg} ${e.color}`}>
+                                        {e.label}
+                                      </span>
+                                    ) : null;
+                                  })}
+                                  {msgs.length > 4 && (
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-400 font-semibold">+{msgs.length - 4}</span>
+                                  )}
+                                </div>
+                                <div className="text-xs text-slate-400 mt-0.5">{msgs.length} message{msgs.length !== 1 ? "s" : ""} sent</div>
+                              </div>
+
+                              {/* Timestamp */}
+                              <div className="text-right shrink-0">
+                                <div className="text-[11px] text-slate-400 font-mono tabular-nums">{latest.sent_at ? formatTimestamp(latest.sent_at) : "—"}</div>
+                              </div>
+
+                              {/* Chevron */}
+                              <svg xmlns="http://www.w3.org/2000/svg" width={14} height={14} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"
+                                className={`text-slate-300 transition-transform shrink-0 ${isContactExpanded ? "rotate-180" : ""}`}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                              </svg>
+                            </div>
+
+                            {/* Expanded: all messages for this contact */}
+                            {isContactExpanded && (
+                              <div className="border-t border-slate-100 px-4 pb-3 pt-2 space-y-1 animate-in fade-in slide-in-from-top-1">
+                                <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-2 font-semibold">All Messages ({msgs.length})</div>
+                                {msgs.map((msg) => {
+                                  const ch = CHANNEL_SVG[msg.channel] ?? CHANNEL_SVG.Email;
+                                  const isMsgExpanded = expandedMsgId === msg.id;
+                                  const evtM = msg.latest_event ? (EVT_SVG[msg.latest_event] ?? EVT_SVG.SENT) : null;
+                                  const isCall = msg.channel === "Call";
+                                  const callDuration = msg.event_payload?.duration_seconds;
+                                  const callPhone = msg.event_payload?.contact_phone;
+
+                                  return (
+                                    <div
+                                      key={msg.id}
+                                      className={`rounded-lg border cursor-pointer transition-all ${
+                                        isMsgExpanded
+                                          ? `bg-slate-50 border-slate-200 ring-1 ${evtM?.ring ?? "ring-slate-200"}`
+                                          : "bg-slate-50/60 border-slate-100 hover:bg-slate-100 hover:border-slate-200"
+                                      }`}
+                                      onClick={(e) => { e.stopPropagation(); setExpandedMsgId(isMsgExpanded ? null : msg.id); }}
+                                    >
+                                      <div className="flex items-center gap-2.5 px-3 py-2">
+                                        <div className={`w-7 h-7 rounded-lg ${ch.bg} flex items-center justify-center shrink-0`}>
+                                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" width={14} height={14} className={ch.color}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d={ch.d} />
+                                          </svg>
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-center gap-1.5 flex-wrap">
+                                            <span className={`text-[10px] px-2 py-0.5 rounded-md font-semibold uppercase tracking-wider ${
+                                              msg.channel === "Email" ? "bg-blue-50 text-blue-500" :
+                                              msg.channel === "Call" ? "bg-indigo-50 text-indigo-500" :
+                                              "bg-cyan-50 text-cyan-600"
+                                            }`}>{msg.channel}</span>
+                                            <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold ${
+                                              msg.send_status === "SENT" || msg.send_status === "SUCCESS" ? "bg-emerald-50 text-emerald-600" :
+                                              msg.send_status === "FAILED" || msg.send_status === "FAILED_SEND" ? "bg-red-50 text-red-500" :
+                                              "bg-slate-100 text-slate-500"
+                                            }`}>{msg.send_status}</span>
+                                            {msg.latest_event && evtM && (
+                                              <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold ${evtM.bg} ${evtM.color}`}>
+                                                {evtM.label}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                        <div className="text-right shrink-0">
+                                          <div className="text-[10px] text-slate-400 font-mono">{msg.sent_at ? formatTimestamp(msg.sent_at) : "—"}</div>
+                                          <div className="text-[9px] text-slate-300">{msg.sent_at ? relativeTime(msg.sent_at) : ""}</div>
+                                        </div>
+                                        <svg xmlns="http://www.w3.org/2000/svg" width={12} height={12} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"
+                                          className={`text-slate-300 transition-transform shrink-0 ${isMsgExpanded ? "rotate-180" : ""}`}>
+                                          <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                                        </svg>
+                                      </div>
+
+                                      {/* Message detail */}
+                                      {isMsgExpanded && (
+                                        <div className="px-3 pb-2.5 pt-1 border-t border-slate-100 space-y-1.5">
+                                          <div className="grid grid-cols-2 gap-2">
+                                            <div className="bg-white rounded-md p-2">
+                                              <div className="text-[9px] text-slate-400 uppercase tracking-wider mb-0.5">Message ID</div>
+                                              <div className="text-[10px] text-slate-600 font-mono">{msg.id.slice(0, 16)}…</div>
+                                            </div>
+                                            {msg.provider_message_id && (
+                                              <div className="bg-white rounded-md p-2">
+                                                <div className="text-[9px] text-slate-400 uppercase tracking-wider mb-0.5">Provider ID</div>
+                                                <div className="text-[10px] text-slate-600 font-mono">{msg.provider_message_id.slice(0, 20)}…</div>
+                                              </div>
+                                            )}
+                                          </div>
+                                          {/* Call details */}
+                                          {isCall && msg.event_payload && (
+                                            <div className="bg-white rounded-md p-2">
+                                              <div className="text-[9px] text-slate-400 uppercase tracking-wider mb-1">Call Details</div>
+                                              <div className="flex items-center gap-4 flex-wrap">
+                                                {callPhone ? (
+                                                  <div className="flex items-baseline gap-1">
+                                                    <span className="text-[9px] text-slate-400">Phone:</span>
+                                                    <span className="text-[10px] text-slate-700 font-medium">{String(callPhone)}</span>
+                                                  </div>
+                                                ) : null}
+                                                {callDuration != null && Number(callDuration) > 0 && (
+                                                  <div className="flex items-baseline gap-1">
+                                                    <span className="text-[9px] text-slate-400">Duration:</span>
+                                                    <span className="text-[10px] text-slate-700 font-medium">{fmtDuration(Number(callDuration))}</span>
+                                                  </div>
+                                                )}
+                                                {msg.event_payload?.contact_name ? (
+                                                  <div className="flex items-baseline gap-1">
+                                                    <span className="text-[9px] text-slate-400">Name:</span>
+                                                    <span className="text-[10px] text-slate-700 font-medium">{String(msg.event_payload.contact_name)}</span>
+                                                  </div>
+                                                ) : null}
+                                              </div>
+                                            </div>
+                                          )}
+                                          {/* Payload */}
+                                          {msg.event_payload && Object.keys(msg.event_payload).length > 0 && !isCall && (
+                                            <div className="bg-white rounded-md p-2">
+                                              <div className="text-[9px] text-slate-400 uppercase tracking-wider mb-1">Payload</div>
+                                              <div className="grid grid-cols-2 gap-1">
+                                                {Object.entries(msg.event_payload).map(([k, v]) => (
+                                                  <div key={k} className="flex items-baseline gap-1">
+                                                    <span className="text-[9px] text-slate-400 font-mono">{k}:</span>
+                                                    <span className="text-[10px] text-slate-700 font-medium truncate">{String(v)}</span>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )
               )}
             </>
           )}
@@ -4072,7 +4453,12 @@ function SettingsView({
 //  Root App
 // ─────────────────────────────────────────────────────────────────────────────
 export default function App() {
-  const [view, setView] = useState<View>("login");
+  // Restore view from localStorage, defaulting to "login" if not logged in
+  const [view, setView] = useState<View>(() => {
+    if (typeof window === "undefined") return "login";
+    const saved = localStorage.getItem("infynd:lastView");
+    return (saved && ["dashboard","create","detail","analytics","approval","history","tracking","settings"].includes(saved)) ? saved as View : "login";
+  });
   const [userEmail, setUserEmail] = useState("");
   const [role, setRole] = useState("VIEWER");
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -4082,6 +4468,13 @@ export default function App() {
   const [approvalCamp, setApprovalCamp] = useState<Campaign | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const lastKnownCount = useRef<number>(-1);
+
+  // Persist view to localStorage whenever it changes (excluding login)
+  useEffect(() => {
+    if (view !== "login") {
+      localStorage.setItem("infynd:lastView", view);
+    }
+  }, [view]);
 
   useEffect(() => {
     loadTokens();
@@ -4109,7 +4502,13 @@ export default function App() {
       const payload = JSON.parse(atob(tok.split(".")[1]));
       setUserEmail(payload.email ?? "");
       setRole(payload.role ?? "VIEWER");
-      setView("create"); // ← land on create page after login
+      // Restore saved view or default to create
+      const saved = localStorage.getItem("infynd:lastView");
+      if (saved && ["dashboard","create","detail","analytics","approval","history","tracking","settings"].includes(saved)) {
+        setView(saved as View);
+      } else {
+        setView("create");
+      }
       refreshCampaigns();
     } catch { /* ignore */ }
   }
@@ -4139,6 +4538,7 @@ export default function App() {
 
   function handleLogout() {
     clearTokens();
+    localStorage.removeItem("infynd:lastView"); // Clear saved view on logout
     setCampaigns([]);
     setSelectedCamp(null);
     lastKnownCount.current = -1;

@@ -42,7 +42,7 @@ def require_roles(allowed_roles: List[str]):
     def _check(current_user: TokenData = Depends(get_current_user)) -> TokenData:
         if current_user.role not in allowed_roles:
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
+                status_code=status.HTTP_401_UNAUTHORIZED,
                 detail={"detail": "Insufficient permissions", "code": "FORBIDDEN"},
             )
         return current_user
