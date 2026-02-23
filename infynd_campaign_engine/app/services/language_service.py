@@ -376,6 +376,34 @@ _LOCATION_MAP: Dict[str, LanguageConfig] = {
     "remote":         _ENGLISH_US,
 }
 
+# Explicit language name mapping (used when a caller asks to switch languages)
+_LANGUAGE_NAME_MAP: Dict[str, LanguageConfig] = {
+    "tamil": _TAMIL,
+    "தமிழ்": _TAMIL,
+    "hindi": _HINDI,
+    "हिन्दी": _HINDI,
+    "हिंदी": _HINDI,
+    "telugu": _TELUGU,
+    "తెలుగు": _TELUGU,
+    "kannada": _KANNADA,
+    "ಕನ್ನಡ": _KANNADA,
+    "malayalam": _MALAYALAM,
+    "മലയാളം": _MALAYALAM,
+    "english": _ENGLISH_IN,
+    "en": _ENGLISH_IN,
+}
+
+
+def resolve_language_from_request(text: Optional[str]) -> Optional[LanguageConfig]:
+    """Resolve a language config from explicit language mention in user text."""
+    if not text:
+        return None
+    lowered = text.strip().lower()
+    for key, config in _LANGUAGE_NAME_MAP.items():
+        if key in lowered:
+            return config
+    return None
+
 
 def resolve_language(location: Optional[str]) -> LanguageConfig:
     """

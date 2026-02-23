@@ -1,7 +1,9 @@
 """
 SendGrid Service — sends emails via SendGrid API.
 Validates webhook ECDSA signature (Event Webhook v3).
+Includes automatic retry logic with exponential backoff.
 """
+import asyncio
 import hashlib
 import base64
 import logging
@@ -14,6 +16,8 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 SENDGRID_API_BASE = "https://api.sendgrid.com/v3"
+SENDGRID_MAX_RETRIES = 2
+SENDGRID_TIMEOUT = 30
 
 
 async def send_email(
@@ -24,7 +28,7 @@ async def send_email(
     plain_text: str = "",
     message_id_prefix: str = "",
 ) -> Optional[str]:
-    """Send an email via SendGrid and return the X-Message-Id header."""
+    """Send an email via SendGrid with retry logic and return the X-Message-Id header."""
     headers = {
         "Authorization": f"Bearer {settings.SENDGRID_API_KEY}",
         "Content-Type": "application/json",
@@ -73,23 +77,41 @@ async def send_email(
         "categories": [str(campaign_id)],
     }
 
-    try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.post(
-                f"{SENDGRID_API_BASE}/mail/send",
-                headers=headers,
-                json=payload,
-            )
-            if response.status_code == 202:
-                msg_id = response.headers.get("X-Message-Id", "")
-                logger.info(f"[SendGrid] Sent to {to_email}, msg_id={msg_id}")
-                return msg_id
-            else:
-                logger.error(f"[SendGrid] Failed for {to_email}: {response.status_code} {response.text}")
-                return None
-    except Exception as exc:
-        logger.error(f"[SendGrid] Exception sending to {to_email}: {exc}")
-        return None
+    for attempt in range(SENDGRID_MAX_RETRIES):
+        try:
+            async with httpx.AsyncClient(timeout=SENDGRID_TIMEOUT) as client:
+                response = await client.post(
+                    f"{SENDGRID_API_BASE}/mail/send",
+                    headers=headers,
+                    json=payload,
+                )
+                if response.status_code == 202:
+                    msg_id = response.headers.get("X-Message-Id", "")
+                    logger.info(f"[SendGrid] Sent to {to_email}, msg_id={msg_id}")
+                    return msg_id
+                elif response.status_code >= 500:
+                    # Retryable server error
+                    logger.warning(f"[SendGrid] Server error (attempt {attempt + 1}/{SENDGRID_MAX_RETRIES}): {response.status_code}")
+                    if attempt < SENDGRID_MAX_RETRIES - 1:
+                        await asyncio.sleep(0.5 * (attempt + 1))  # Exponential backoff
+                        continue
+                else:
+                    # Client error — don't retry
+                    logger.error(f"[SendGrid] Failed for {to_email}: {response.status_code} {response.text}")
+                    return None
+        except asyncio.TimeoutError:
+            logger.warning(f"[SendGrid] Timeout (attempt {attempt + 1}/{SENDGRID_MAX_RETRIES}) to {to_email}")
+            if attempt < SENDGRID_MAX_RETRIES - 1:
+                await asyncio.sleep(0.5 * (attempt + 1))
+                continue
+        except Exception as exc:
+            logger.warning(f"[SendGrid] Exception (attempt {attempt + 1}/{SENDGRID_MAX_RETRIES}) to {to_email}: {exc}")
+            if attempt < SENDGRID_MAX_RETRIES - 1:
+                await asyncio.sleep(0.5 * (attempt + 1))
+                continue
+    
+    logger.error(f"[SendGrid] Failed to send to {to_email} after {SENDGRID_MAX_RETRIES} attempts")
+    return None
 
 
 def verify_sendgrid_signature(

@@ -115,7 +115,11 @@ $outBytes = [System.IO.File]::ReadAllBytes($wav)
 def _available_voices_sync() -> list[dict[str, str]]:
     co_init = _co_initialize_if_windows()
     try:
-        pyttsx3 = importlib.import_module("pyttsx3")
+        try:
+            pyttsx3 = importlib.import_module("pyttsx3")
+        except Exception:
+            return _list_voices_powershell_sync()
+
         engine = pyttsx3.init()
         try:
             voices = engine.getProperty("voices") or []

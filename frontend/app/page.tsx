@@ -75,7 +75,7 @@ export default function LandingPage() {
         <div className="landing-nav-inner">
           {/* Logo */}
           <a href="/" className="landing-logo">
-            <span className="landing-logo-icon">in</span>
+            <img src="https://localmote.com/web/uploads/catalogs/81f6e364-0779-4b50-a38c-9018e551ac1b/logo/logo.png" alt="InFynd" className="landing-logo-icon" />
             <span className="landing-logo-text">
               InFynd <span className="landing-logo-badge">V1</span>
             </span>
@@ -462,7 +462,7 @@ export default function LandingPage() {
         <div className="landing-footer-inner">
           <div className="landing-footer-brand">
             <a href="/" className="landing-logo">
-              <span className="landing-logo-icon">in</span>
+              <img src="https://localmote.com/web/uploads/catalogs/81f6e364-0779-4b50-a38c-9018e551ac1b/logo/logo.png" alt="InFynd" className="landing-logo-icon" />
               <span className="landing-logo-text">InFynd</span>
             </a>
             <p className="landing-footer-tagline">

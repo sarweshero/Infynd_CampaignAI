@@ -1234,18 +1234,12 @@ button, a, input, select, textarea {
   text-decoration: none;
 }
 .landing-logo-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: block;
   width: 32px;
   height: 32px;
   border-radius: 0.625rem;
-  background: var(--gradient-brand);
-  color: white;
-  font-weight: 800;
-  font-size: 0.75rem;
-  font-family: 'Syne', sans-serif;
-  letter-spacing: -0.03em;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 .landing-logo-text {
   font-weight: 700;
@@ -1999,7 +1993,7 @@ button, a, input, select, textarea {
   color: white;
 }
 .landing-footer .landing-logo-icon {
-  background: linear-gradient(135deg, #60a5fa, #3b82f6);
+  /* inherits base .landing-logo-icon styles */
 }
 .landing-footer-tagline {
   font-size: 0.8125rem;

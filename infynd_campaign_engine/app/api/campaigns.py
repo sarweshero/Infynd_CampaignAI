@@ -362,10 +362,8 @@ async def get_common_content_audio_voices(
         voices = await list_voices()
     except Exception as exc:
         logger.exception("[API] Failed to list call template voices", exc_info=exc)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"detail": "Failed to list audio voices", "code": "AUDIO_VOICES_FAILED"},
-        )
+        # Avoid hard-failing the UI if the local TTS stack is unavailable.
+        return {"voices": []}
 
     return {"voices": voices}
 

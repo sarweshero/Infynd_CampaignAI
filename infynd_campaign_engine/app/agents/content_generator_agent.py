@@ -44,6 +44,10 @@ Campaign:
 Instructions:
 {{prompt}}
 
+Safety and tone:
+- Use respectful, professional language.
+- Do NOT use abusive, inappropriate, sexual, hateful, or violent language.
+
 Return ONLY valid JSON.
 Do NOT add markdown.
 Do NOT add explanations.
@@ -74,6 +78,10 @@ Product Link: {{product_link}}
 Instructions:
 {{prompt}}
 
+Safety and tone:
+- Use respectful, professional language.
+- Do NOT use abusive, inappropriate, sexual, hateful, or violent language.
+
 Return ONLY valid JSON.
 
 Format:
@@ -100,6 +108,10 @@ Product Link: {{product_link}}
 
 Instructions:
 {{prompt}}
+
+Safety and tone:
+- Use respectful, professional language.
+- Do NOT use abusive, inappropriate, sexual, hateful, or violent language.
 
 Return ONLY valid JSON.
 

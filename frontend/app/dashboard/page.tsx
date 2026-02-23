@@ -210,16 +210,23 @@ function Sidebar({
   onLogout: () => void;
 }) {
   return (
-    <aside className="flex flex-col w-[260px] h-screen overflow-y-auto shrink-0 sticky top-0 bg-[#0f172a] py-5 relative">
+    <aside className="flex flex-col w-[260px] h-screen overflow-y-auto shrink-0 sticky top-0 bg-gradient-to-b from-[#0f0c29] via-[#1e1b4b] to-[#312e81] py-5 relative">
+      {/* Subtle side glow */}
+      <div className="pointer-events-none absolute inset-y-0 right-0 w-px bg-gradient-to-b from-indigo-500/20 via-violet-500/30 to-indigo-500/10" />
+
       {/* Logo */}
       <div className="px-5 mb-8">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold text-xs">
-            <span className="font-display tracking-tight">In</span>
+          <div className="w-9 h-9 rounded-lg bg-white/90 p-1 flex items-center justify-center shrink-0 shadow-md shadow-black/20">
+            <img
+              src="https://localmote.com/web/uploads/catalogs/81f6e364-0779-4b50-a38c-9018e551ac1b/logo/logo.png"
+              alt="InFynd"
+              className="w-full h-full object-contain"
+            />
           </div>
           <div>
             <div className="text-white font-bold text-[15px] leading-tight font-display tracking-tight">InFynd</div>
-            <div className="text-blue-400 text-[10px] font-medium tracking-widest uppercase">Campaign Engine</div>
+            <div className="text-indigo-300 text-[10px] font-medium tracking-widest uppercase">Campaign Engine</div>
           </div>
         </div>
       </div>
@@ -232,16 +239,16 @@ function Sidebar({
             onClick={() => setView(item.id as View)}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] transition-all duration-150 ${
               view === item.id
-                ? "bg-white/[0.08] text-white font-medium"
-                : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]"
+                ? "bg-white/[0.12] text-white font-medium shadow-sm"
+                : "text-indigo-200/70 hover:text-white hover:bg-white/[0.07]"
             }`}
           >
-            <span className={`w-[18px] h-[18px] flex-shrink-0 ${view === item.id ? "text-blue-400" : ""}`}>
+            <span className={`w-[18px] h-[18px] flex-shrink-0 ${view === item.id ? "text-violet-300" : ""}`}>
               {item.icon}
             </span>
             {item.label}
             {item.id === "create" && (
-              <span className="ml-auto text-[9px] bg-blue-600 text-white px-1.5 py-0.5 rounded font-bold tracking-wide">
+              <span className="ml-auto text-[9px] bg-violet-500/80 text-white px-1.5 py-0.5 rounded font-bold tracking-wide">
                 AI
               </span>
             )}
@@ -250,21 +257,25 @@ function Sidebar({
       </nav>
 
       {/* Divider */}
-      <div className="mx-4 border-t border-white/[0.06]" />
+      <div className="mx-4 border-t border-white/[0.08]" />
 
       {/* User */}
       <div className="px-4 pt-4 pb-2">
         <div className="flex items-center gap-3 mb-3">
-          <div className="w-8 h-8 rounded-md bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold uppercase">
-            {userEmail.charAt(0)}
+          <div className="w-8 h-8 rounded-md bg-white/90 flex items-center justify-center shrink-0 shadow-md shadow-black/20 p-1">
+            <img
+              src="https://localmote.com/web/uploads/catalogs/81f6e364-0779-4b50-a38c-9018e551ac1b/logo/logo.png"
+              alt=""
+              className="w-full h-full object-contain"
+            />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-xs text-slate-300 truncate font-medium">{userEmail}</div>
+            <div className="text-xs text-indigo-100 truncate font-medium">{userEmail}</div>
             <div
               className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium mt-0.5 ${
                 role === "ADMIN"
-                  ? "bg-blue-500/20 text-blue-300"
-                  : "bg-white/[0.05] text-slate-500"
+                  ? "bg-violet-400/20 text-violet-300"
+                  : "bg-white/[0.08] text-indigo-300"
               }`}
             >
               {role}
@@ -273,7 +284,7 @@ function Sidebar({
         </div>
         <button
           onClick={onLogout}
-          className="w-full flex items-center gap-2 text-xs text-slate-500 hover:text-red-400 transition-all px-1 py-1.5 rounded-md hover:bg-white/[0.04]"
+          className="w-full flex items-center gap-2 text-xs text-indigo-300/60 hover:text-red-400 transition-all px-1 py-1.5 rounded-md hover:bg-white/[0.06]"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
           Sign out
@@ -350,8 +361,12 @@ function LoginView({ onSuccess }: { onSuccess: (email: string, role: string) => 
       <div className="w-full max-w-md relative z-10">
         {/* Logo & heading */}
         <div className="text-center mb-8 animate-fade-in-up">
-          <div className="inline-flex w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 items-center justify-center text-white text-lg font-bold mb-4">
-            <span className="font-display">In</span>
+          <div className="w-16 h-16 rounded-2xl bg-white shadow-md flex items-center justify-center mx-auto mb-4 p-2">
+            <img
+              src="https://localmote.com/web/uploads/catalogs/81f6e364-0779-4b50-a38c-9018e551ac1b/logo/logo.png"
+              alt="InFynd"
+              className="w-full h-full object-contain"
+            />
           </div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight font-display">
             InFynd{" "}
@@ -1325,18 +1340,7 @@ function DashboardView({
 // ─────────────────────────────────────────────────────────────────────────────
 //  Create Campaign — ChatGPT-style clean centered UI
 // ─────────────────────────────────────────────────────────────────────────────
-const PROMPT_EXAMPLES = [
-  "Reach out to HR Directors in Chennai about InFynd AI's time-to-hire reduction tool. Use cold email style, short and punchy, with a CTA to book a 15-min demo.",
-  "Promote our SaaS analytics platform to CTOs at mid-size fintech companies in Bangalore. Use LinkedIn, focus on ROI and ease of integration.",
-  "Call startup founders in Mumbai to introduce our funding advisory services from VentureEdge. Target founders who recently raised a Seed round.",
-];
 
-const SUGGESTION_CHIPS = [
-  { icon: "📧", label: "Cold email campaign", prompt: "Write a cold email campaign for " },
-  { icon: "💼", label: "LinkedIn outreach", prompt: "Run a LinkedIn outreach campaign targeting " },
-  { icon: "📞", label: "Sales call scripts", prompt: "Generate call scripts to pitch " },
-  { icon: "🎯", label: "Multi-channel blast", prompt: "Launch a multi-channel campaign across email, LinkedIn and calls for " },
-];
 
 function CreateView({
   onCreated,
@@ -1393,27 +1397,24 @@ function CreateView({
             <span className="text-blue-600">campaign today?</span>
           </h1>
           <p className="create-chat-subtitle">
-            Describe your outreach goal. Our AI agents will find the right audience, pick the best channels, and craft personalized messages.
+            Tell us about your company and product in plain language. Our AI will find the right audience, pick the best channels, and craft the messages automatically.
           </p>
         </div>
 
-        {/* Suggestion chips — only show when prompt is empty */}
+        {/* Example prompt hint — only show when prompt is empty */}
         {!prompt && (
-          <div className="create-chat-chips animate-fade-in-up" style={{ animationDelay: "0.1s" }}>
-            {SUGGESTION_CHIPS.map((chip) => (
-              <button
-                key={chip.label}
-                type="button"
-                onClick={() => {
-                  setPrompt(chip.prompt);
-                  textareaRef.current?.focus();
-                }}
-                className="create-chip"
-              >
-                <span className="create-chip-icon">{chip.icon}</span>
-                <span>{chip.label}</span>
-              </button>
-            ))}
+          <div className="animate-fade-in-up" style={{ animationDelay: "0.1s" }}>
+            <p className="text-xs text-slate-400 text-center mb-2 uppercase tracking-wide font-medium">Example</p>
+            <button
+              type="button"
+              onClick={() => {
+                setPrompt(`I have a company named "Xyndrix." Here we build an application called "Dixgo" for the developers to complete their task agentically. I want to promote my software to all the developers.`);
+                textareaRef.current?.focus();
+              }}
+              className="w-full text-left px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 hover:bg-blue-50 hover:border-blue-200 transition-all text-sm text-slate-600 leading-relaxed cursor-pointer"
+            >
+              "I have a company named <strong>Xyndrix</strong>. Here we build an application called <strong>Dixgo</strong> for the developers to complete their task agentically. I want to promote my software to all the developers."
+            </button>
           </div>
         )}
       </div>
@@ -1475,7 +1476,7 @@ function CreateView({
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Describe your campaign…"
+              placeholder="Tell us about your company, product, and who you want to reach…"
               rows={1}
               className="create-textarea"
             />
@@ -4291,14 +4292,20 @@ function SettingsView({
   // Fetch profile on mount
   useEffect(() => {
     if (profileFetched) return;
-    setProfileFetched(true);
-    getProfile().then(({ data }) => {
-      if (data) {
-        setFullName(data.full_name ?? "");
-        setEmail(data.email);
-      }
-    });
+    loadTokens();
+    getProfile()
+      .then(({ data }) => {
+        if (data) {
+          setFullName(data.full_name ?? "");
+          setEmail(data.email);
+        }
+      })
+      .finally(() => setProfileFetched(true));
   }, [profileFetched]);
+
+  useEffect(() => {
+    if (userEmail && !email) setEmail(userEmail);
+  }, [userEmail, email]);
 
   async function handleSaveProfile(e: React.FormEvent) {
     e.preventDefault();
@@ -4338,12 +4345,16 @@ function SettingsView({
           {/* Avatar banner */}
           <div className="bg-white border border-slate-200 rounded-lg p-5">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white text-lg font-bold uppercase">
-                {(fullName || email).charAt(0)}
+              <div className="w-12 h-12 rounded-xl bg-white shadow-sm border border-slate-200 flex items-center justify-center p-2 shrink-0">
+                <img
+                  src="https://localmote.com/web/uploads/catalogs/81f6e364-0779-4b50-a38c-9018e551ac1b/logo/logo.png"
+                  alt=""
+                  className="w-full h-full object-contain"
+                />
               </div>
               <div>
-                <div className="text-base font-semibold text-slate-800">{fullName || email}</div>
-                <div className="text-xs text-slate-400 mt-0.5">{email}</div>
+                <div className="text-base font-semibold text-slate-800">{fullName || email || userEmail}</div>
+                <div className="text-xs text-slate-400 mt-0.5">{email || userEmail}</div>
                 <div className={`inline-flex mt-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
                   role === "ADMIN"
                     ? "bg-blue-100 text-blue-700 border border-blue-200"
