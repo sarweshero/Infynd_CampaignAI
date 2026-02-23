@@ -20,17 +20,14 @@
 ## 🎬 Product Demo
 
 <p align="center">
-  <video width="850" controls>
-    <source src="https://chat.google.com/u/2/api/get_attachment_url?url_type=STREAMING_URL&content_type=video%2Fmp4&attachment_token=AOo0EEV6Tgn9g2UR6dY%2Bmod4kXUqRdtpkgoyvqOLn9cMH0z3iK6H%2F%2FEC0I6j%2F%2BY1K4YcyNJd68StZRZ57YgedrQNAThHkf8CsE3ewQ%2BMVNV%2FnAdroth1M95aE%2FjKGpgouS7gAIM%2B0C2CoUxJODA3c2A36UZGslIRzY0fAZJ9BouqNBXAy3qoeiEK2ERDIujWl3%2Bv6PLeqju8ugnf5vLXwtN3ApQWNiPhk83TQrS4p7KfkqF6wDGarYSri%2BJqALPuC7gbwj6Q%2FHjpg9bhWg9SD638F5WIWGrldO5f6%2FScuZ43vTJhCdIfSTGIi2URIdSzFevzxyCPMTlb8AMgm2GDMkhwSyw%2BIAVqXqblaGWOeGiP9K3ia6fNqcXHnnRrb0FpRA%2F1nzv%2B3%2Fb%2BiMeoRKtGph9m8%2B2l8iAWxdAzjvoOxlZ2gMcadILj11RhfYgAQWADVwj2ICwSV64AZaVuSGd4fM5itHxNqnIAN72bYZVGtuVnfnGk6UeRKfaLH6zsQL%2B6vUK8taRtLbee3n6oV1jVY8m1TewuWh2HnE6hLdEKYCKNb1ROELhD%2BV6WA2Bog5atn7hChCcmUsh%2F68tIKwNrCPhbJxa6ft3pFPnEkuIcRH2FKTZ7aLuRylVtQajAk1WH%2Bf0H8yVLsazockJeK5CZX4fc%2BpHoyA%2F0zFNaUwjB2Unorkha0UGip3GUpT8R%2Ffw4zWz9RDkQj0lIZK2aluhmjbY%2FbQ8uorsd1IAMYdQXHalGageFnwSCRMvEj3XMULti&video_format=22&authuser=2&cpn=nLxvgHbW3jXfbOPw&c=WEB_EMBEDDED_PLAYER&cver=1.20260217.11.00" type="video/mp4" />
-    Your browser does not support the video tag. You can <a href="https://chat.google.com/u/2/api/get_attachment_url?url_type=STREAMING_URL&content_type=video%2Fmp4&attachment_token=AOo0EEV6Tgn9g2UR6dY%2Bmod4kXUqRdtpkgoyvqOLn9cMH0z3iK6H%2F%2FEC0I6j%2F%2BY1K4YcyNJd68StZRZ57YgedrQNAThHkf8CsE3ewQ%2BMVNV%2FnAdroth1M95aE%2FjKGpgouS7gAIM%2B0C2CoUxJODA3c2A36UZGslIRzY0fAZJ9BouqNBXAy3qoeiEK2ERDIujWl3%2Bv6PLeqju8ugnf5vLXwtN3ApQWNiPhk83TQrS4p7KfkqF6wDGarYSri%2BJqALPuC7gbwj6Q%2FHjpg9bhWg9SD638F5WIWGrldO5f6%2FScuZ43vTJhCdIfSTGIi2URIdSzFevzxyCPMTlb8AMgm2GDMkhwSyw%2BIAVqXqblaGWOeGiP9K3ia6fNqcXHnnRrb0FpRA%2F1nzv%2B3%2Fb%2BiMeoRKtGph9m8%2B2l8iAWxdAzjvoOxlZ2gMcadILj11RhfYgAQWADVwj2ICwSV64AZaVuSGd4fM5itHxNqnIAN72bYZVGtuVnfnGk6UeRKfaLH6zsQL%2B6vUK8taRtLbee3n6oV1jVY8m1TewuWh2HnE6hLdEKYCKNb1ROELhD%2BV6WA2Bog5atn7hChCcmUsh%2F68tIKwNrCPhbJxa6ft3pFPnEkuIcRH2FKTZ7aLuRylVtQajAk1WH%2Bf0H8yVLsazockJeK5CZX4fc%2BpHoyA%2F0zFNaUwjB2Unorkha0UGip3GUpT8R%2Ffw4zWz9RDkQj0lIZK2aluhmjbY%2FbQ8uorsd1IAMYdQXHalGageFnwSCRMvEj3XMULti&video_format=22&authuser=2&cpn=nLxvgHbW3jXfbOPw&c=WEB_EMBEDDED_PLAYER&cver=1.20260217.11.00">download the demo</a> instead.
-  </video>
+  <a href="https://chat.google.com/u/2/api/get_attachment_url?url_type=STREAMING_URL&content_type=video%2Fmp4&attachment_token=AOo0EEV6Tgn9g2UR6dY%2Bmod4kXUqRdtpkgoyvqOLn9cMH0z3iK6H%2F%2FEC0I6j%2F%2BY1K4YcyNJd68StZRZ57YgedrQNAThHkf8CsE3ewQ%2BMVNV%2FnAdroth1M95aE%2FjKGpgouS7gAIM%2B0C2CoUxJODA3c2A36UZGslIRzY0fAZJ9BouqNBXAy3qoeiEK2ERDIujWl3%2Bv6PLeqju8ugnf5vLXwtN3ApQWNiPhk83TQrS4p7KfkqF6wDGarYSri%2BJqALPuC7gbwj6Q%2FHjpg9bhWg9SD638F5WIWGrldO5f6%2FScuZ43vTJhCdIfSTGIi2URIdSzFevzxyCPMTlb8AMgm2GDMkhwSyw%2BIAVqXqblaGWOeGiP9K3ia6fNqcXHnnRrb0FpRA%2F1nzv%2B3%2Fb%2BiMeoRKtGph9m8%2B2l8iAWxdAzjvoOxlZ2gMcadILj11RhfYgAQWADVwj2ICwSV64AZaVuSGd4fM5itHxNqnIAN72bYZVGtuVnfnGk6UeRKfaLH6zsQL%2B6vUK8taRtLbee3n6oV1jVY8m1TewuWh2HnE6hLdEKYCKNb1ROELhD%2BV6WA2Bog5atn7hChCcmUsh%2F68tIKwNrCPhbJxa6ft3pFPnEkuIcRH2FKTZ7aLuRylVtQajAk1WH%2Bf0H8yVLsazockJeK5CZX4fc%2BpHoyA%2F0zFNaUwjB2Unorkha0UGip3GUpT8R%2Ffw4zWz9RDkQj0lIZK2aluhmjbY%2FbQ8uorsd1IAMYdQXHalGageFnwSCRMvEj3XMULti&video_format=22&authuser=2&cpn=nLxvgHbW3jXfbOPw&c=WEB_EMBEDDED_PLAYER&cver=1.20260217.11.00">
+    <img src="landing.png" alt="InFynd Demo Preview" width="850"/>
+  </a>
 </p>
 
 <p align="center">
   <em>Click the preview above to watch a walkthrough of campaign creation, approval workflows, RBAC system, and analytics dashboards.</em>
 </p>
-
-> 💡 Tip: Converting `demo.mp4` to a short GIF improves GitHub rendering performance.
 
 ---
 
