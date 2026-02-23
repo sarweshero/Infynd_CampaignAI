@@ -9,7 +9,7 @@ __pycache__/
 .venv
 venv/
 ENV/
-*.next
+.next
 # VSCode
 .vscode/
 
