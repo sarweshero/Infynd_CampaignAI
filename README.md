@@ -1,143 +1,334 @@
-# InFynd Campaign Engine
+# 🚀 InFynd Campaign Engine
 
-A full-stack B2B campaign management platform designed to orchestrate, track, and analyze multi-channel outreach campaigns.
+<p align="center">
+  <strong>Enterprise-Grade B2B Multi-Channel Campaign Management Platform</strong><br/>
+  Orchestrate · Approve · Track · Analyze
+</p>
 
-## 🚀 Overview
-
-InFynd Campaign Engine is a modern web application that allows companies to manage their outbound marketing efforts. It features a robust role-based access control (RBAC) system, real-time analytics, and a streamlined campaign creation workflow.
-
-### Key Features
-
-- **Multi-Channel Campaigns:** Create and manage campaigns across Email, LinkedIn, and Phone channels.
-- **Role-Based Access Control (RBAC):**
-  - **Admin:** Full access to manage users, create/approve campaigns, and view all analytics.
-  - **Manager:** Can create, edit, and submit campaigns for approval, plus view analytics.
-  - **Viewer:** Read-only access to view campaigns and analytics.
-- **Company-Centric Registration:** New companies register an Admin account, who can then invite team members to their workspace.
-- **Real-Time Analytics:** Track campaign performance, engagement rates, and channel-specific metrics.
-- **Approval Workflows:** Built-in review process for campaigns before they go live.
-- **Modern UI/UX:** Responsive, accessible interface built with Next.js and Tailwind CSS, featuring a custom portal-based tooltip system.
+<p align="center">
+  <img src="https://img.shields.io/badge/Frontend-Next.js%2014-black?logo=nextdotjs" />
+  <img src="https://img.shields.io/badge/Backend-FastAPI-009688?logo=fastapi" />
+  <img src="https://img.shields.io/badge/Database-PostgreSQL-336791?logo=postgresql" />
+  <img src="https://img.shields.io/badge/Cache-Redis-red?logo=redis" />
+  <img src="https://img.shields.io/badge/Auth-JWT-blue" />
+  <img src="https://img.shields.io/badge/ORM-SQLAlchemy-red" />
+  <img src="https://img.shields.io/badge/License-Proprietary-lightgrey" />
+</p>
 
 ---
 
-## 🛠️ Tech Stack
+## 🎬 Product Demo
 
-### Frontend
-- **Framework:** [Next.js 14](https://nextjs.org/) (App Router)
-- **Library:** [React 18](https://react.dev/)
-- **Styling:** [Tailwind CSS](https://tailwindcss.com/)
-- **Language:** TypeScript
-- **State/Data Fetching:** SWR, Axios
-- **Icons:** Lucide React (SVG)
+<p align="center">
+  <a href="demo.mp4">
+    <img src="demo-thumbnail.png" alt="InFynd Demo Preview" width="850"/>
+  </a>
+</p>
 
-### Backend
-- **Framework:** [FastAPI](https://fastapi.tiangolo.com/)
-- **Language:** Python 3.10+
-- **Database:** PostgreSQL
-- **ORM:** SQLAlchemy (Async)
-- **Migrations:** Alembic
-- **Authentication:** JWT (JSON Web Tokens) with Bearer scheme
-- **Validation:** Pydantic v2
+<p align="center">
+  <em>Click the preview above to watch a walkthrough of campaign creation, approval workflows, RBAC system, and analytics dashboards.</em>
+</p>
+
+> 💡 Tip: Converting `demo.mp4` to a short GIF improves GitHub rendering performance.
 
 ---
 
-## 📂 Project Structure
+# 📌 Overview
 
-```text
-InFynd/V1/
-├── frontend/                  # Next.js frontend application
-│   ├── app/                   # App Router pages and layouts
-│   │   ├── dashboard/         # Main application interface (page.tsx)
-│   │   ├── globals.css        # Global styles and Tailwind directives
-│   │   └── layout.tsx         # Root layout
-│   ├── lib/                   # Utilities and API client
-│   │   └── api.ts             # Centralized Axios instance and API functions
-│   ├── public/                # Static assets
-│   └── package.json           # Frontend dependencies
-│
-├── infynd_campaign_engine/    # FastAPI backend application
-│   ├── alembic/               # Database migration scripts
-│   ├── app/                   # Main application code
-│   │   ├── api/               # Route handlers (auth, admin, campaigns, etc.)
-│   │   ├── core/              # Core config, security, and DB setup
-│   │   ├── models/            # SQLAlchemy ORM models
-│   │   └── schemas/           # Pydantic validation schemas
-│   ├── main.py                # FastAPI application entry point
-│   ├── alembic.ini            # Alembic configuration
-│   └── requirements.txt       # Python dependencies
-│
-└── .env                       # Environment variables (not tracked in git)
+InFynd Campaign Engine is a full-stack B2B outreach orchestration platform designed to manage, approve, and analyze multi-channel outbound campaigns within organizations.
+
+The system enforces structured collaboration through **Role-Based Access Control (RBAC)**, real-time analytics, Redis-backed performance enhancements, and approval-driven workflows.
+
+Built for scalability, operational transparency, and enterprise-grade performance.
+
+---
+
+# ✨ Core Capabilities
+
+## 📣 Multi-Channel Campaign Execution
+
+- Email Campaigns  
+- LinkedIn Outreach  
+- Phone Campaigns  
+- Channel-specific performance tracking  
+
+---
+
+## 🔐 Role-Based Access Control (RBAC)
+
+| Role       | Permissions |
+|------------|------------|
+| **Admin**  | Full access: manage users, approve campaigns, view analytics |
+| **Manager**| Create/edit campaigns, submit for approval, view analytics |
+| **Viewer** | Read-only access to campaigns and analytics |
+
+---
+
+## 🏢 Company-Centric Workspace Model
+
+- Company workspace created during registration  
+- First user automatically assigned `ADMIN`  
+- Admin can invite Managers & Viewers  
+- Strict company-scoped data isolation  
+
+---
+
+## 📊 Real-Time Analytics
+
+- Campaign engagement metrics  
+- Channel-specific breakdown  
+- Performance summaries  
+- Approval lifecycle tracking  
+
+---
+
+## ⚡ Performance & Infrastructure
+
+- Async FastAPI backend  
+- PostgreSQL with connection pooling  
+- Redis for caching / real-time enhancements  
+- JWT-based authentication  
+- Environment-driven configuration  
+
+---
+
+# 🧱 System Architecture
+
+```
+Frontend (Next.js 14 + TypeScript)
+        │
+        │ Axios + JWT
+        ▼
+Backend (FastAPI - Async)
+        │
+        │ SQLAlchemy (Async ORM)
+        ▼
+PostgreSQL
+        │
+        ▼
+Redis (Caching / Performance Layer)
 ```
 
 ---
 
-## ⚙️ Local Development Setup
+# 🛠 Tech Stack
 
-### Prerequisites
+## Frontend
+- **Framework:** Next.js 14 (App Router)
+- **Language:** TypeScript
+- **UI:** Tailwind CSS
+- **State/Data Fetching:** SWR + Axios
+- **Icons:** Lucide React
+- **Rendering:** React 18
+
+## Backend
+- **Framework:** FastAPI
+- **Language:** Python 3.10+
+- **ORM:** SQLAlchemy (Async)
+- **Database:** PostgreSQL
+- **Cache:** Redis
+- **Authentication:** JWT (Bearer)
+- **Validation:** Pydantic v2
+- **Migrations:** Alembic
+
+---
+
+# 📂 Project Structure
+
+```
+InFynd/V1/
+│
+├── frontend/
+│   ├── app/
+│   │   ├── dashboard/
+│   │   ├── layout.tsx
+│   │   └── globals.css
+│   ├── lib/
+│   │   └── api.ts
+│   ├── public/
+│   └── package.json
+│
+├── infynd_campaign_engine/
+│   ├── alembic/
+│   ├── app/
+│   │   ├── api/
+│   │   ├── core/
+│   │   ├── models/
+│   │   └── schemas/
+│   ├── main.py
+│   ├── alembic.ini
+│   ├── requirements.txt
+│   ├── .env.example
+│   └── .env (ignored)
+│
+└── README.md
+```
+
+---
+
+# ⚙️ Local Development Setup
+
+## 🔹 Prerequisites
+
 - Node.js (v18+)
 - Python (v3.10+)
 - PostgreSQL (v14+)
+- Redis (v6+)
 
-### 1. Database Setup
-Ensure PostgreSQL is running and create a database for the project:
+---
+
+## 1️⃣ Database Setup
+
 ```sql
 CREATE DATABASE infynd_campaigns;
 ```
 
-### 2. Backend Setup
-Navigate to the backend directory and set up the Python environment:
+Ensure PostgreSQL and Redis are running locally.
+
+---
+
+## 2️⃣ Backend Setup
 
 ```bash
 cd infynd_campaign_engine
 
-# Create and activate virtual environment
 python -m venv .venv
-# On Windows:
+
+# Windows
 .venv\Scripts\activate
-# On macOS/Linux:
-source .venv/bin/activate
 
-# Install dependencies
+# macOS/Linux
+# source .venv/bin/activate
+
 pip install -r requirements.txt
+```
 
-# Set up environment variables
-# Create a .env file in the infynd_campaign_engine directory based on your local DB
-# Example: DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/infynd_campaigns
+### 🔐 Environment Configuration
 
-# Run database migrations
+Copy the example environment file:
+
+```bash
+cp .env.example .env
+```
+
+Update the following values inside `.env`:
+
+```
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=infynd_campaigns
+DB_USER=postgres
+DB_PASSWORD=postgres
+
+REDIS_HOST=localhost
+REDIS_PORT=6379
+
+SECRET_KEY=generate-a-secure-random-key
+```
+
+⚠️ Never commit your `.env` file.
+
+---
+
+### Run Database Migrations
+
+```bash
 alembic upgrade head
+```
 
-# Start the FastAPI server
+---
+
+### Start Backend Server
+
+```bash
 uvicorn app.main:app --reload --port 8000
 ```
-The backend API will be available at `http://localhost:8000`.
-Interactive API documentation (Swagger UI) is available at `http://localhost:8000/docs`.
 
-### 3. Frontend Setup
-Open a new terminal, navigate to the frontend directory, and start the development server:
+API Base URL:
+```
+http://localhost:8000
+```
+
+Swagger Documentation:
+```
+http://localhost:8000/docs
+```
+
+---
+
+## 3️⃣ Frontend Setup
 
 ```bash
 cd frontend
 
-# Install dependencies
 npm install
-
-# Start the Next.js development server
 npm run dev
 ```
-The frontend application will be available at `http://localhost:3000`.
+
+Frontend URL:
+```
+http://localhost:3000
+```
+
+If needed, configure:
+
+```
+NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+NEXT_PUBLIC_WS_URL=ws://localhost:8000/api/v1
+```
+
+inside `frontend/.env.local`.
 
 ---
 
-## 🔐 Authentication Flow
+# 🔐 Authentication Flow
 
-1. **Company Registration:** A new user registers their company via the frontend. This creates the company workspace and assigns the user the `ADMIN` role.
-2. **Login:** Users authenticate with their email and password to receive an Access Token and a Refresh Token.
-3. **User Management:** The `ADMIN` can navigate to the "Users" tab in the dashboard to invite new team members (`MANAGER` or `VIEWER`) to their company.
-4. **API Security:** All protected backend routes require a valid JWT Bearer token. Role-based endpoints (like `/api/v1/admin/users`) enforce strict permission checks.
+1. Company registers → Workspace created → Assigned `ADMIN`
+2. Login → Access Token + Refresh Token issued
+3. Admin invites Managers / Viewers
+4. Protected routes validate JWT
+5. Role-based endpoint enforcement
 
 ---
 
-## 📝 License
+# 🚀 Production Readiness
 
-Proprietary and Confidential. All rights reserved by InFynd.
+- Async-first backend architecture  
+- Redis-backed performance layer  
+- Configurable DB connection pooling  
+- Strict RBAC enforcement  
+- Migration-based schema control  
+- Environment-isolated configuration  
+- Company-level data segregation  
+
+---
+
+# 🧪 API Documentation
+
+Interactive Swagger UI:
+```
+/docs
+```
+
+OpenAPI schema:
+```
+/openapi.json
+```
+
+---
+
+# 🔮 Planned Enhancements
+
+- Campaign scheduling
+- AI-driven campaign optimization
+- Webhook integrations
+- Real-time dashboard streaming
+- Dockerized production deployment
+- Observability & monitoring stack
+
+---
+
+# 📜 License
+
+Proprietary & Confidential  
+All rights reserved by **InFynd**
