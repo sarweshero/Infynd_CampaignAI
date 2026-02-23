@@ -23,7 +23,6 @@ uvicorn.log
 
 # Environment
 .env
-.env.*
 
 # Database
 *.sqlite3
