@@ -12,6 +12,7 @@ from app.core.database import init_db
 from app.services.logging_service import configure_logging
 
 # API routers
+from app.api.admin import router as admin_router
 from app.api.auth import router as auth_router
 from app.api.campaigns import router as campaign_router
 from app.api.analytics import router as analytics_router
@@ -101,6 +102,7 @@ app.add_middleware(
 # ROUTERS
 # ─────────────────────────────────────────────────────────────
 app.include_router(auth_router, prefix=PREFIX)
+app.include_router(admin_router, prefix=PREFIX)
 app.include_router(tracking_router, prefix=PREFIX)
 app.include_router(campaign_router, prefix=PREFIX)
 app.include_router(analytics_router, prefix=PREFIX)

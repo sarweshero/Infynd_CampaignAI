@@ -8,6 +8,7 @@ class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=6, max_length=128)
     full_name: Optional[str] = None
+    company: str = Field(..., min_length=2, max_length=255)
 
 
 class RegisterResponse(BaseModel):
@@ -15,7 +16,8 @@ class RegisterResponse(BaseModel):
     email: str
     full_name: Optional[str]
     role: str
-    message: str = "Registration successful"
+    company: Optional[str]
+    message: str = "Company registered successfully"
 
 
 # ── Login ─────────────────────────────────────────────────────────────────────
@@ -30,6 +32,7 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     email: str = ""
     role: str = "VIEWER"
+    company: Optional[str] = None
 
 
 class RefreshRequest(BaseModel):

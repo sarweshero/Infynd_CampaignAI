@@ -2106,3 +2106,12 @@ button, a, input, select, textarea {
 .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
 .scrollbar-thin::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.3); border-radius: 4px; }
 .scrollbar-thin::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.5); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TOOLTIP SYSTEM — handled by JS portal (TooltipLayer component)
+   CSS pseudo-element tooltips removed; portal renders at document.body
+   and is immune to parent overflow:hidden / overflow:auto clipping.
+   ═══════════════════════════════════════════════════════════════════════════ */
+[data-tooltip] {
+  position: relative;
+}

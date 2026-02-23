@@ -651,15 +651,6 @@ video {
     border-radius: 0 4px 4px 0;
     background: var(--gradient-brand);
   }
-.chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.375rem;
-    padding: 0.25rem 0.75rem;
-    border-radius: 9999px;
-    font-size: 0.75rem;
-    font-weight: 500;
-  }
 .pointer-events-none {
   pointer-events: none;
 }
@@ -783,6 +774,9 @@ video {
 }
 .mb-8 {
   margin-bottom: 2rem;
+}
+.ml-1\.5 {
+  margin-left: 0.375rem;
 }
 .ml-2 {
   margin-left: 0.5rem;
@@ -1019,11 +1013,17 @@ video {
 .max-w-4xl {
   max-width: 56rem;
 }
+.max-w-\[150px\] {
+  max-width: 150px;
+}
 .max-w-\[160px\] {
   max-width: 160px;
 }
 .max-w-\[180px\] {
   max-width: 180px;
+}
+.max-w-\[200px\] {
+  max-width: 200px;
 }
 .max-w-\[260px\] {
   max-width: 260px;
@@ -1103,6 +1103,9 @@ video {
 }
 .cursor-pointer {
   cursor: pointer;
+}
+.cursor-default {
+  cursor: default;
 }
 .select-none {
   -webkit-user-select: none;
@@ -1676,6 +1679,10 @@ video {
   --tw-bg-opacity: 1;
   background-color: rgb(20 184 166 / var(--tw-bg-opacity, 1));
 }
+.bg-violet-100 {
+  --tw-bg-opacity: 1;
+  background-color: rgb(237 233 254 / var(--tw-bg-opacity, 1));
+}
 .bg-violet-400\/20 {
   background-color: rgb(167 139 250 / 0.2);
 }
@@ -2122,6 +2129,9 @@ video {
 }
 .font-medium {
   font-weight: 500;
+}
+.font-normal {
+  font-weight: 400;
 }
 .font-semibold {
   font-weight: 600;
@@ -4521,6 +4531,15 @@ button, a, input, select, textarea {
 .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
 .scrollbar-thin::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.3); border-radius: 4px; }
 .scrollbar-thin::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.5); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TOOLTIP SYSTEM — handled by JS portal (TooltipLayer component)
+   CSS pseudo-element tooltips removed; portal renders at document.body
+   and is immune to parent overflow:hidden / overflow:auto clipping.
+   ═══════════════════════════════════════════════════════════════════════════ */
+[data-tooltip] {
+  position: relative;
+}
 .placeholder\:text-slate-300::-moz-placeholder {
   --tw-text-opacity: 1;
   color: rgb(203 213 225 / var(--tw-text-opacity, 1));
@@ -4588,13 +4607,28 @@ button, a, input, select, textarea {
   --tw-bg-opacity: 1;
   background-color: rgb(21 128 61 / var(--tw-bg-opacity, 1));
 }
+.hover\:bg-red-50:hover {
+  --tw-bg-opacity: 1;
+  background-color: rgb(254 242 242 / var(--tw-bg-opacity, 1));
+}
+.hover\:bg-red-600:hover {
+  --tw-bg-opacity: 1;
+  background-color: rgb(220 38 38 / var(--tw-bg-opacity, 1));
+}
 .hover\:bg-slate-100:hover {
   --tw-bg-opacity: 1;
   background-color: rgb(241 245 249 / var(--tw-bg-opacity, 1));
 }
+.hover\:bg-slate-200:hover {
+  --tw-bg-opacity: 1;
+  background-color: rgb(226 232 240 / var(--tw-bg-opacity, 1));
+}
 .hover\:bg-slate-50:hover {
   --tw-bg-opacity: 1;
   background-color: rgb(248 250 252 / var(--tw-bg-opacity, 1));
+}
+.hover\:bg-slate-50\/50:hover {
+  background-color: rgb(248 250 252 / 0.5);
 }
 .hover\:bg-slate-50\/60:hover {
   background-color: rgb(248 250 252 / 0.6);
@@ -4703,6 +4737,10 @@ button, a, input, select, textarea {
 }
 @media (min-width: 640px) {
 
+  .sm\:grid-cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .sm\:grid-cols-3 {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -4741,6 +4779,10 @@ button, a, input, select, textarea {
 
   .lg\:grid-cols-2 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .lg\:grid-cols-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .lg\:grid-cols-4 {

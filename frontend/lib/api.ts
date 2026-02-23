@@ -255,10 +255,10 @@ export interface RegisterResponse {
 }
 
 /** POST /auth/register */
-export const authRegister = (email: string, password: string, full_name?: string) =>
+export const authRegister = (email: string, password: string, company: string, full_name?: string) =>
   apiFetch<RegisterResponse>("/auth/register", {
     method: "POST",
-    body: { email, password, full_name: full_name || null },
+    body: { email, password, company, full_name: full_name || null },
     auth: false,
   });
 
@@ -655,3 +655,53 @@ export const getTrackingInsights = (campaignId?: string) =>
   apiFetch<TrackingInsights>(
     campaignId ? `/insights/tracking?campaign_id=${campaignId}` : "/insights/tracking",
   );
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  ❽  ADMIN — user management  (ADMIN role required)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface AdminUser {
+  id:         string;
+  email:      string;
+  full_name:  string | null;
+  role:       string;
+  company:    string | null;
+  is_active:  boolean;
+  created_at: string;
+}
+
+export interface AdminUserListResponse {
+  users: AdminUser[];
+  total: number;
+}
+
+export interface AdminCreateUserPayload {
+  email:     string;
+  password:  string;
+  full_name?: string;
+  role:      string;
+  company?:  string;
+}
+
+export interface AdminUpdateUserPayload {
+  role?:      string;
+  full_name?: string;
+  company?:   string;
+  is_active?: boolean;
+}
+
+/** GET /admin/users — list all users */
+export const adminListUsers = () =>
+  apiFetch<AdminUserListResponse>("/admin/users");
+
+/** POST /admin/users — create a user */
+export const adminCreateUser = (payload: AdminCreateUserPayload) =>
+  apiFetch<AdminUser>("/admin/users", { method: "POST", body: payload });
+
+/** PATCH /admin/users/:id — update role / name / company / active */
+export const adminUpdateUser = (userId: string, payload: AdminUpdateUserPayload) =>
+  apiFetch<AdminUser>(`/admin/users/${userId}`, { method: "PATCH", body: payload });
+
+/** DELETE /admin/users/:id */
+export const adminDeleteUser = (userId: string) =>
+  apiFetch<void>(`/admin/users/${userId}`, { method: "DELETE" });

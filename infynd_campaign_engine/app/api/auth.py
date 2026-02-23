@@ -33,33 +33,45 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 # ── REGISTER ──────────────────────────────────────────────────────────────────
 @router.post("/register", response_model=RegisterResponse, status_code=status.HTTP_201_CREATED)
 async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db)):
-    """Create a new user account."""
+    """Register a new company and create its first ADMIN user."""
+    # Check email uniqueness
     result = await db.execute(select(User).where(User.email == payload.email))
-    existing = result.scalars().first()
-    if existing:
+    if result.scalars().first():
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="A user with this email already exists",
         )
 
-    role = "ADMIN" if payload.email.endswith("@infynd.com") else "VIEWER"
+    # Check if this company already has an ADMIN
+    company_check = await db.execute(
+        select(User).where(User.company == payload.company, User.role == "ADMIN")
+    )
+    if company_check.scalars().first():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Company '{payload.company}' already has a registered admin. Contact your company admin to add you as a user.",
+        )
 
+    # Registrant is always the company ADMIN
     user = User(
         email=payload.email,
         hashed_password=hash_password(payload.password),
         full_name=payload.full_name,
-        role=role,
+        role="ADMIN",
+        company=payload.company,
+        is_active=True,
     )
     db.add(user)
     await db.flush()
 
-    logger.info(f"[Auth] Registered: {user.email} → role={user.role}")
+    logger.info(f"[Auth] Company registered: {payload.company} | admin={user.email}")
 
     return RegisterResponse(
         id=str(user.id),
         email=user.email,
         full_name=user.full_name,
         role=user.role,
+        company=user.company,
     )
 
 
@@ -86,6 +98,7 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
         "email": user.email,
         "role": user.role,
         "user_id": str(user.id),
+        "company": user.company,
     }
     access_token = create_access_token(token_data)
     refresh_token = create_refresh_token(token_data)
@@ -96,6 +109,7 @@ async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
         refresh_token=refresh_token,
         email=user.email,
         role=user.role,
+        company=user.company,
     )
 
 
@@ -117,6 +131,7 @@ async def refresh_token(payload: RefreshRequest):
         "email": data["email"],
         "role": data.get("role", "VIEWER"),
         "user_id": data.get("user_id"),
+        "company": data.get("company"),
     }
     new_access = create_access_token(token_data)
     new_refresh = create_refresh_token(token_data)

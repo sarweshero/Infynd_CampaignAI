@@ -7,6 +7,7 @@ import React, {
   useCallback,
   Fragment,
 } from "react";
+import { createPortal } from "react-dom";
 import useSWR from "swr";
 import {
   authLogin,
@@ -54,6 +55,11 @@ import {
   type GlobalInsights,
   type HistoryInsights,
   type TrackingInsights,
+  adminListUsers,
+  adminCreateUser,
+  adminUpdateUser,
+  adminDeleteUser,
+  type AdminUser,
 } from "@/lib/api";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -68,7 +74,8 @@ type View =
   | "approval"
   | "history"
   | "tracking"
-  | "settings";
+  | "settings"
+  | "admin";
 
 interface Toast {
   id: number;
@@ -186,14 +193,85 @@ function Toasts({ toasts, remove }: { toasts: Toast[]; remove: (id: number) => v
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+//  TooltipLayer — portal-based tooltip, immune to overflow:hidden/auto parents
+// ─────────────────────────────────────────────────────────────────────────────
+function TooltipLayer() {
+  const [tip, setTip] = useState<{
+    text: string;
+    x: number;
+    y: number;
+    side: "top" | "right";
+  } | null>(null);
+
+  useEffect(() => {
+    function onOver(e: MouseEvent) {
+      const el = (e.target as HTMLElement).closest("[data-tooltip]") as HTMLElement | null;
+      if (!el) { setTip(null); return; }
+      const text = el.getAttribute("data-tooltip");
+      if (!text) return;
+      const rect = el.getBoundingClientRect();
+      // Sidebar is ~260px wide — show tooltip to the right; elsewhere show above
+      const side: "right" | "top" = rect.left < 270 ? "right" : "top";
+      const x = side === "right" ? rect.right : rect.left + rect.width / 2;
+      const y = side === "right" ? rect.top + rect.height / 2 : rect.top;
+      setTip({ text, x, y, side });
+    }
+    function onOut(e: MouseEvent) {
+      const from = e.target as HTMLElement;
+      const to   = e.relatedTarget as HTMLElement | null;
+      if (!from.closest("[data-tooltip]")) return;
+      if (to?.closest("[data-tooltip]") === from.closest("[data-tooltip]")) return;
+      setTip(null);
+    }
+    document.addEventListener("mouseover", onOver);
+    document.addEventListener("mouseout",  onOut);
+    return () => {
+      document.removeEventListener("mouseover", onOver);
+      document.removeEventListener("mouseout",  onOut);
+    };
+  }, []);
+
+  if (!tip || typeof document === "undefined") return null;
+
+  const style: React.CSSProperties =
+    tip.side === "right"
+      ? { position: "fixed", left: tip.x + 10, top: tip.y, transform: "translateY(-50%)" }
+      : { position: "fixed", left: tip.x, top: tip.y - 10, transform: "translate(-50%, -100%)" };
+
+  return createPortal(
+    <div
+      style={{
+        ...style,
+        background: "#1e293b",
+        color: "#f1f5f9",
+        fontSize: 11,
+        fontWeight: 500,
+        lineHeight: 1.4,
+        padding: "5px 10px",
+        borderRadius: 6,
+        pointerEvents: "none",
+        zIndex: 99999,
+        whiteSpace: "nowrap",
+        maxWidth: 240,
+        boxShadow: "0 4px 14px rgba(0,0,0,0.25)",
+      }}
+    >
+      {tip.text}
+    </div>,
+    document.body,
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 //  Sidebar
 // ─────────────────────────────────────────────────────────────────────────────
-const NAV: { id: string; label: string; icon: React.ReactNode }[] = [
+const NAV: { id: string; label: string; icon: React.ReactNode; adminOnly?: boolean }[] = [
   { id: "create", label: "New Campaign", icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg> },
   { id: "dashboard", label: "Dashboard", icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg> },
   { id: "history", label: "History", icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> },
   { id: "tracking", label: "Tracking", icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg> },
   { id: "settings", label: "Settings", icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" x2="4" y1="21" y2="14"/><line x1="4" x2="4" y1="10" y2="3"/><line x1="12" x2="12" y1="21" y2="12"/><line x1="12" x2="12" y1="8" y2="3"/><line x1="20" x2="20" y1="21" y2="16"/><line x1="20" x2="20" y1="12" y2="3"/><line x1="2" x2="6" y1="14" y2="14"/><line x1="10" x2="14" y1="8" y2="8"/><line x1="18" x2="22" y1="16" y2="16"/></svg> },
+  { id: "admin",    label: "Personas", adminOnly: true, icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> },
 ];
 
 function Sidebar({
@@ -233,10 +311,18 @@ function Sidebar({
 
       {/* Nav */}
       <nav className="flex-1 px-3 space-y-0.5">
-        {NAV.map((item) => (
+        {NAV.filter((item) => !item.adminOnly || role === "ADMIN").map((item) => (
           <button
             key={item.id}
             onClick={() => setView(item.id as View)}
+            data-tooltip={
+              item.id === "create"    ? "Create a new AI campaign" :
+              item.id === "dashboard" ? "Overview & campaign list" :
+              item.id === "history"   ? "Past campaign history" :
+              item.id === "tracking"  ? "Live delivery tracking" :
+              item.id === "settings"  ? "Account & preferences" :
+              item.id === "admin"     ? "Manage users & roles" : item.label
+            }
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] transition-all duration-150 ${
               view === item.id
                 ? "bg-white/[0.12] text-white font-medium shadow-sm"
@@ -284,6 +370,7 @@ function Sidebar({
         </div>
         <button
           onClick={onLogout}
+          data-tooltip="Sign out of InFynd"
           className="w-full flex items-center gap-2 text-xs text-indigo-300/60 hover:text-red-400 transition-all px-1 py-1.5 rounded-md hover:bg-white/[0.06]"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -302,6 +389,7 @@ function LoginView({ onSuccess }: { onSuccess: (email: string, role: string) => 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  const [company, setCompany] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
@@ -328,12 +416,17 @@ function LoginView({ onSuccess }: { onSuccess: (email: string, role: string) => 
       setLoading(false);
       return;
     }
+    if (!company.trim()) {
+      setErr("Company name is required");
+      setLoading(false);
+      return;
+    }
 
-    const { data, error } = await authRegister(email, password, fullName || undefined);
+    const { data, error } = await authRegister(email, password, company.trim(), fullName || undefined);
     setLoading(false);
     if (error || !data) { setErr(error ?? "Registration failed"); return; }
 
-    setSuccessMsg("Account created! Signing you in…");
+    setSuccessMsg("Company registered! Signing you in…");
 
     // Auto-login after successful registration
     const { data: loginData, error: loginErr } = await authLogin(email, password);
@@ -351,6 +444,8 @@ function LoginView({ onSuccess }: { onSuccess: (email: string, role: string) => 
     setMode(mode === "login" ? "register" : "login");
     setErr("");
     setSuccessMsg("");
+    setCompany("");
+    setFullName("");
   }
 
   return (
@@ -375,7 +470,7 @@ function LoginView({ onSuccess }: { onSuccess: (email: string, role: string) => 
           <p className="text-slate-400 mt-1.5 text-sm">
             {mode === "login"
               ? "Sign in to your account"
-              : "Create a new account"}
+              : "Register your company — you'll be the admin"}
           </p>
         </div>
 
@@ -406,24 +501,42 @@ function LoginView({ onSuccess }: { onSuccess: (email: string, role: string) => 
                   : "text-slate-500 hover:text-slate-700"
               }`}
             >
-              Register
+              Register Company
             </button>
           </div>
 
-          {/* Registration: Full Name */}
+          {/* Registration fields */}
           {mode === "register" && (
-            <div>
-              <label className="block text-sm text-slate-700 mb-2 font-semibold">
-                Full Name
-              </label>
-              <input
-                type="text"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                className="input-premium"
-                placeholder="John Doe"
-              />
-            </div>
+            <>
+              <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-sm text-blue-700">
+                <span className="font-semibold">Setting up your company?</span> You&apos;ll become the <span className="font-semibold">Admin</span> and can add team members from the dashboard.
+              </div>
+              <div>
+                <label className="block text-sm text-slate-700 mb-2 font-semibold">
+                  Company Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={company}
+                  onChange={(e) => setCompany(e.target.value)}
+                  className="input-premium"
+                  placeholder="Acme Corp"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-slate-700 mb-2 font-semibold">
+                  Full Name
+                </label>
+                <input
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className="input-premium"
+                  placeholder="John Doe"
+                />
+              </div>
+            </>
           )}
 
           <div>
@@ -483,21 +596,21 @@ function LoginView({ onSuccess }: { onSuccess: (email: string, role: string) => 
             {loading ? (
               <span className="flex items-center justify-center gap-3">
                 <span className="btn-spinner" />
-                {mode === "login" ? "Signing in…" : "Creating account…"}
+                {mode === "login" ? "Signing in…" : "Registering company…"}
               </span>
             ) : mode === "login" ? (
               "Sign in to InFynd →"
             ) : (
-              "Create Account →"
+              "Register Company →"
             )}
           </button>
 
           <p className="text-center text-xs text-slate-400">
             {mode === "login" ? (
               <>
-                Don&apos;t have an account?{" "}
+                New company?{" "}
                 <button type="button" onClick={switchMode} className="text-blue-500 font-medium hover:underline">
-                  Register
+                  Register your company
                 </button>
               </>
             ) : (
@@ -1019,7 +1132,7 @@ function DashboardView({
               : "Create your first campaign to get started"}
           </p>
         </div>
-        <button onClick={refreshCampaigns} className="btn-ghost text-sm flex items-center gap-2">
+        <button onClick={refreshCampaigns} data-tooltip="Refresh campaign list" className="btn-ghost text-sm flex items-center gap-2">
           {loading
             ? <span className="btn-spinner-blue" />
             : <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>}
@@ -1126,8 +1239,8 @@ function DashboardView({
                     <p className="text-xs text-slate-500 mt-0.5 truncate">{c.company} · {c.platform ?? "email"} · {fmt(c.created_at)}</p>
                   </div>
                   <div className="flex gap-2 shrink-0">
-                    <button onClick={() => handleApprove(c)} className="btn-success text-xs px-3 py-1.5">✓ Approve</button>
-                    <button onClick={() => onApproval(c)} className="btn-warning text-xs px-3 py-1.5">Review</button>
+                    <button onClick={() => handleApprove(c)} data-tooltip="Quick-approve and queue for dispatch" className="btn-success text-xs px-3 py-1.5">✓ Approve</button>
+                    <button onClick={() => onApproval(c)} data-tooltip="Review AI-generated content" className="btn-warning text-xs px-3 py-1.5">Review</button>
                   </div>
                 </div>
               ))}
@@ -1319,10 +1432,10 @@ function DashboardView({
                     <td className="px-5 py-4 text-right">
                       <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                         {c.pipeline_state === "AWAITING_APPROVAL" && (
-                          <button onClick={() => onApproval(c)} className="btn-warning text-xs px-2.5 py-1">Review</button>
+                          <button onClick={() => onApproval(c)} data-tooltip="Review AI-generated content" className="btn-warning text-xs px-2.5 py-1">Review</button>
                         )}
-                        <button onClick={() => onAnalytics(c)} className="btn-ghost text-xs px-2.5 py-1">Analytics</button>
-                        <button onClick={() => onSelect(c)} className="btn-ghost text-xs px-2.5 py-1">View</button>
+                        <button onClick={() => onAnalytics(c)} data-tooltip="View delivery analytics" className="btn-ghost text-xs px-2.5 py-1">Analytics</button>
+                        <button onClick={() => onSelect(c)} data-tooltip="Open campaign details" className="btn-ghost text-xs px-2.5 py-1">View</button>
                       </div>
                     </td>
                   </tr>
@@ -1447,6 +1560,7 @@ function CreateView({
                   <button
                     type="button"
                     onClick={() => setAutoApprove((v) => !v)}
+                    data-tooltip="Auto-send skips manual review"
                     className={`create-toggle ${autoApprove ? "create-toggle-on" : ""}`}
                   >
                     <span className="create-toggle-thumb" />
@@ -1465,7 +1579,7 @@ function CreateView({
               type="button"
               onClick={() => setShowOptions((v) => !v)}
               className={`create-action-btn ${showOptions ? "create-action-btn-active" : ""}`}
-              title="Campaign options"
+              data-tooltip="Show / hide options"
               style={{ transition: "transform 0.2s", transform: showOptions ? "rotate(180deg)" : "rotate(0deg)" }}
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
@@ -1485,7 +1599,7 @@ function CreateView({
               type="submit"
               disabled={loading || !prompt.trim()}
               className="create-send-btn"
-              title="Launch campaign"
+              data-tooltip="Launch AI campaign pipeline"
             >
               {loading ? (
                 <span className="create-send-spinner" />
@@ -1802,13 +1916,14 @@ function DetailView({
             <button
               onClick={saveCommon}
               disabled={savingCommon}
+              data-tooltip="Save template changes"
               className="btn-brand text-xs px-4 py-1.5 flex items-center gap-1.5"
             >
               {savingCommon ? (
                 <><span className="btn-spinner" style={{ width: 12, height: 12 }} /> Saving…</>
               ) : "💾 Save Template"}
             </button>
-            <button onClick={cancelEditCommon} className="btn-ghost text-xs px-4 py-1.5">Cancel</button>
+            <button onClick={cancelEditCommon} data-tooltip="Discard changes" className="btn-ghost text-xs px-4 py-1.5">Cancel</button>
           </div>
         </div>
       );
@@ -1927,6 +2042,7 @@ function DetailView({
                         ? cancelEditCommon()
                         : startEditCommon(previewChannel)
                     }
+                    data-tooltip="Edit this channel's template"
                     className="btn-ghost text-xs px-3 py-1"
                   >
                     {editingCommonChannel === previewChannel ? "Cancel" : "✎ Edit"}
@@ -1970,6 +2086,7 @@ function DetailView({
                   <button
                     onClick={() => loadCallTemplateAudio(false)}
                     disabled={callAudioLoading}
+                    data-tooltip="Generate a voice preview of the call script"
                     className="btn-ghost text-xs px-3 py-1.5 flex items-center gap-2"
                   >
                     {callAudioLoading ? <><span className="btn-spinner-blue" /> Generating…</> : "▶ Preview Audio"}
@@ -1990,6 +2107,7 @@ function DetailView({
                   <button
                     onClick={() => approveTemplateChannel(previewChannel)}
                     disabled={approving}
+                    data-tooltip="Approve this template — dispatch starts when all channels are approved"
                     className="btn-success mt-4 text-xs px-4 py-2 flex items-center gap-2"
                   >
                     {approving ? (
@@ -2052,6 +2170,7 @@ function DetailView({
           <button
             onClick={handleRegenerate}
             disabled={regenerating}
+            data-tooltip="Re-generate content with AI"
             className="btn-warning text-sm px-5 py-2.5 flex items-center gap-2"
           >
             {regenerating ? (
@@ -2061,7 +2180,7 @@ function DetailView({
         )}
         {campaign.pipeline_state === "AWAITING_APPROVAL" && (
           <>
-            <button onClick={handleApprove} className="btn-success text-sm px-5 py-2.5">
+            <button onClick={handleApprove} data-tooltip="Approve and dispatch to all contacts" className="btn-success text-sm px-5 py-2.5">
               ✓ Approve &amp; Send Campaign
             </button>
 
@@ -2073,6 +2192,7 @@ function DetailView({
             <button
               onClick={() => analyticsEnabled && onAnalytics(campaign)}
               disabled={!analyticsEnabled}
+              data-tooltip="View delivery analytics"
               className={`btn-brand text-sm px-5 py-2.5 ${!analyticsEnabled ? "opacity-40 cursor-not-allowed" : ""}`}
             >
               ◎ Analytics
@@ -2623,7 +2743,7 @@ function ApprovalView({
           <div className="text-5xl mb-4">🎉</div>
           <div className="text-emerald-700 font-bold text-2xl font-display mb-2">Campaign Approved!</div>
           <div className="text-slate-500 text-sm">Your campaign is being sent to all {totalContacts} contacts now.</div>
-          <button onClick={onDone} className="mt-6 btn-brand px-8 py-3">
+          <button onClick={onDone} data-tooltip="Return to campaign overview" className="mt-6 btn-brand px-8 py-3">
             Back to Dashboard
           </button>
         </div>
@@ -2694,6 +2814,7 @@ function ApprovalView({
                 <button
                   onClick={sendApproveAll}
                   disabled={approvingAll}
+                  data-tooltip="Approve all channels and dispatch now"
                   className="btn-success px-8 py-3.5 text-base font-semibold shrink-0 flex items-center gap-2"
                 >
                   {approvingAll ? (
@@ -2750,7 +2871,7 @@ function ApprovalView({
                 </div>
                 <div className="flex items-center gap-2">
                   {canAct && !isEditing && (
-                    <button onClick={() => { setEditFields(displayContent); setIsEditing(true); }} className="btn-ghost text-xs px-3 py-1.5">
+                    <button onClick={() => { setEditFields(displayContent); setIsEditing(true); }} data-tooltip="Edit message content" className="btn-ghost text-xs px-3 py-1.5">
                       ✎ Edit
                     </button>
                   )}
@@ -2758,6 +2879,7 @@ function ApprovalView({
                     <button
                       onClick={sendRegenerate}
                       disabled={!!regeneratingChannel}
+                      data-tooltip="Re-generate this channel's content"
                       className="btn-ghost text-xs px-3 py-1.5"
                     >
                       {regeneratingChannel === displayCh ? (
@@ -2827,15 +2949,15 @@ function ApprovalView({
                 <div className="flex items-center gap-3">
                   {isEditing ? (
                     <>
-                      <button onClick={sendEdit} className="btn-brand text-sm px-5 py-2.5 flex items-center gap-1.5">
+                      <button onClick={sendEdit} data-tooltip="Save your edits" className="btn-brand text-sm px-5 py-2.5 flex items-center gap-1.5">
                         💾 Save Changes
                       </button>
-                      <button onClick={() => { setIsEditing(false); setEditFields(currentContent); }} className="btn-ghost text-sm px-4 py-2.5">
+                      <button onClick={() => { setIsEditing(false); setEditFields(currentContent); }} data-tooltip="Discard edits" className="btn-ghost text-sm px-4 py-2.5">
                         Cancel
                       </button>
                     </>
                   ) : (
-                    <button onClick={sendApprove} className="btn-success text-sm px-6 py-2.5 flex items-center gap-2">
+                    <button onClick={sendApprove} data-tooltip="Approve and mark as ready to send" className="btn-success text-sm px-6 py-2.5 flex items-center gap-2">
                       ✓ Approve {displayCh} Template
                     </button>
                   )}
@@ -4498,6 +4620,409 @@ function SettingsView({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+//  Admin — User Management View
+// ─────────────────────────────────────────────────────────────────────────────
+const ROLES = ["VIEWER", "MANAGER", "ADMIN"] as const;
+type RoleOption = typeof ROLES[number];
+
+const ROLE_STYLE: Record<string, string> = {
+  ADMIN:   "bg-violet-100 text-violet-700 border border-violet-200",
+  MANAGER: "bg-blue-50 text-blue-700 border border-blue-200",
+  VIEWER:  "bg-slate-100 text-slate-600 border border-slate-200",
+};
+
+const ROLE_TOOLTIP: Record<string, string> = {
+  ADMIN:   "Admin — full access: manage users, create & approve campaigns, view all analytics",
+  MANAGER: "Manager — can create, edit & submit campaigns for approval, view analytics",
+  VIEWER:  "Viewer — read-only access: can view campaigns and analytics, no edit rights",
+};
+
+function UsersView({ toast, currentUserEmail, currentUserCompany }: { toast: (msg: string, kind?: Toast["kind"]) => void; currentUserEmail: string; currentUserCompany: string | null }) {
+  const [users,   setUsers]   = useState<AdminUser[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Company is always the admin's own company (locked)
+  const adminCompany = currentUserCompany ?? "";
+
+  // ── Create form state ────────────────────────────────────────────────────
+  const [showForm,    setShowForm]    = useState(false);
+  const [fEmail,      setFEmail]      = useState("");
+  const [fPassword,   setFPassword]   = useState("");
+  const [fFullName,   setFFullName]   = useState("");
+  const [fRole,       setFRole]       = useState<RoleOption>("VIEWER");
+  const [fLoading,    setFLoading]    = useState(false);
+
+  // ── Inline edit ──────────────────────────────────────────────────────────
+  const [editingId,   setEditingId]   = useState<string | null>(null);
+  const [editRole,    setEditRole]    = useState<RoleOption>("VIEWER");
+  const [editName,    setEditName]    = useState("");
+  const [editCompany, setEditCompany] = useState("");
+  const [editActive,  setEditActive]  = useState(true);
+  const [editSaving,  setEditSaving]  = useState(false);
+
+  // ── Delete confirm ───────────────────────────────────────────────────────
+  const [deletingId, setDeletingId]   = useState<string | null>(null);
+
+  // ── Search/filter ────────────────────────────────────────────────────────
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState<string>("All");
+
+  async function loadUsers() {
+    setLoading(true);
+    const { data, error } = await adminListUsers();
+    setLoading(false);
+    if (error || !data) { toast(error ?? "Failed to load users", "error"); return; }
+    setUsers(data.users);
+  }
+
+  useEffect(() => { loadUsers(); }, []);
+
+  async function handleCreate(e: React.FormEvent) {
+    e.preventDefault();
+    if (!fEmail.trim() || !fPassword.trim()) { toast("Email and password are required", "error"); return; }
+    setFLoading(true);
+    const { data, error } = await adminCreateUser({
+      email:     fEmail.trim(),
+      password:  fPassword,
+      full_name: fFullName.trim() || undefined,
+      role:      fRole,
+      company:   adminCompany || undefined,
+    });
+    setFLoading(false);
+    if (error || !data) { toast(error ?? "Failed to create user", "error"); return; }
+    toast(`User ${data.email} created!`, "success");
+    setUsers((p) => [data, ...p]);
+    setShowForm(false);
+    setFEmail(""); setFPassword(""); setFFullName(""); setFRole("VIEWER");
+  }
+
+  function startEdit(u: AdminUser) {
+    setEditingId(u.id);
+    setEditRole(u.role as RoleOption);
+    setEditName(u.full_name ?? "");
+    setEditCompany(u.company ?? "");
+    setEditActive(u.is_active);
+  }
+
+  async function saveEdit() {
+    if (!editingId) return;
+    setEditSaving(true);
+    const { data, error } = await adminUpdateUser(editingId, {
+      role:      editRole,
+      full_name: editName || undefined,
+      company:   editCompany || undefined,
+      is_active: editActive,
+    });
+    setEditSaving(false);
+    if (error || !data) { toast(error ?? "Failed to update user", "error"); return; }
+    toast("User updated", "success");
+    setUsers((p) => p.map((u) => u.id === data.id ? data : u));
+    setEditingId(null);
+  }
+
+  async function confirmDelete(id: string) {
+    const { error } = await adminDeleteUser(id);
+    if (error) { toast(error ?? "Failed to delete user", "error"); setDeletingId(null); return; }
+    toast("User deleted", "success");
+    setUsers((p) => p.filter((u) => u.id !== id));
+    setDeletingId(null);
+  }
+
+  const displayUsers = users.filter((u) => {
+    const q = search.toLowerCase();
+    const matchSearch = !q || u.email.toLowerCase().includes(q) || (u.full_name ?? "").toLowerCase().includes(q) || (u.company ?? "").toLowerCase().includes(q);
+    const matchRole   = roleFilter === "All" || u.role === roleFilter;
+    return matchSearch && matchRole;
+  });
+
+  return (
+    <div className="view-enter space-y-6">
+      {/* ── Header ── */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900 tracking-tight font-display">User Management</h2>
+          <p className="text-slate-400 text-sm mt-0.5">
+            {users.length} registered user{users.length !== 1 ? "s" : ""} · Admin access only
+          </p>
+        </div>
+        <button
+          onClick={() => setShowForm((v) => !v)}
+          className="btn-brand flex items-center gap-2 text-sm px-4 py-2.5"
+          data-tooltip="Create a new user account"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+          New User
+        </button>
+      </div>
+
+      {/* ── Create form ── */}
+      {showForm && (
+        <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm animate-fade-in-up">
+          <h3 className="text-sm font-semibold text-slate-800 mb-4 flex items-center gap-2">
+            <span className="w-6 h-6 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 text-xs font-bold">+</span>
+            Create New User
+          </h3>
+          <form onSubmit={handleCreate} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Email *</label>
+              <input type="email" value={fEmail} onChange={(e) => setFEmail(e.target.value)} required
+                className="input-premium w-full text-sm" placeholder="user@company.com" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Password *</label>
+              <input type="password" value={fPassword} onChange={(e) => setFPassword(e.target.value)} required minLength={6}
+                className="input-premium w-full text-sm" placeholder="Min 6 characters" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Full Name</label>
+              <input type="text" value={fFullName} onChange={(e) => setFFullName(e.target.value)}
+                className="input-premium w-full text-sm" placeholder="Jane Smith" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Company</label>
+              <input type="text" value={adminCompany} readOnly
+                className="input-premium w-full text-sm bg-slate-50 text-slate-500 cursor-not-allowed" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Role</label>
+              <select value={fRole} onChange={(e) => setFRole(e.target.value as RoleOption)}
+                className="input-premium w-full text-sm">
+                {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </div>
+            <div className="flex items-end gap-2">
+              <button type="submit" disabled={fLoading}
+                className="btn-brand text-sm px-5 py-2.5 flex items-center gap-2 flex-1">
+                {fLoading ? <><span className="btn-spinner" /> Creating…</> : "✓ Create User"}
+              </button>
+              <button type="button" onClick={() => setShowForm(false)}
+                className="btn-ghost text-sm px-4 py-2.5">
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* ── Filters ── */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[200px] max-w-xs">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
+            className="input-premium pl-9 w-full text-sm" placeholder="Search by email, name, company…" />
+        </div>
+        <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 gap-0.5">
+          {["All", ...ROLES].map((r) => (
+            <button key={r} onClick={() => setRoleFilter(r)}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                roleFilter === r
+                  ? "bg-white text-blue-700 shadow-sm border border-blue-100"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >{r}</button>
+          ))}
+        </div>
+        <button onClick={loadUsers} data-tooltip="Refresh user list"
+          className="btn-ghost text-xs flex items-center gap-1.5">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+          Refresh
+        </button>
+      </div>
+
+      {/* ── User table ── */}
+      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+        {loading ? (
+          <div className="py-16 flex flex-col items-center gap-4">
+            <div className="loader-orbit" />
+            <span className="text-slate-400 text-sm">Loading users…</span>
+          </div>
+        ) : displayUsers.length === 0 ? (
+          <div className="py-16 flex flex-col items-center gap-3">
+            <div className="w-14 h-14 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-slate-300">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+              </svg>
+            </div>
+            <p className="text-sm font-semibold text-slate-700">{search || roleFilter !== "All" ? "No users match your filter" : "No users yet"}</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-100 bg-slate-50/60">
+                  <th className="px-5 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">User</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Company</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Role</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Status</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider hidden lg:table-cell">Created</th>
+                  <th className="px-5 py-3 text-right text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {displayUsers.map((u) => {
+                  const isEditing = editingId === u.id;
+                  const isSelf    = u.email === currentUserEmail;
+                  return (
+                    <tr key={u.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors group">
+                      {/* User column */}
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                            ROLE_STYLE[u.role]?.replace("border", "").replace("border-violet-200","").replace("border-blue-200","").replace("border-slate-200","") ?? "bg-slate-100 text-slate-500"
+                          }`}>
+                            {(u.full_name ?? u.email)[0].toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            {isEditing ? (
+                              <input value={editName} onChange={(e) => setEditName(e.target.value)}
+                                className="input-premium text-xs w-full max-w-[180px]" placeholder="Full name" />
+                            ) : (
+                              <>
+                                <div className="font-semibold text-slate-800 text-sm truncate max-w-[200px]">
+                                  {u.full_name ?? <span className="text-slate-400 font-normal italic">No name</span>}
+                                  {isSelf && <span className="ml-1.5 text-[10px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded font-bold">You</span>}
+                                </div>
+                                <div className="text-xs text-slate-400 truncate max-w-[200px]">{u.email}</div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      {/* Company column */}
+                      <td className="px-4 py-4">
+                        {isEditing ? (
+                          <input value={editCompany} onChange={(e) => setEditCompany(e.target.value)}
+                            className="input-premium text-xs w-full max-w-[150px]" placeholder="Company" />
+                        ) : (
+                          <span className="text-xs text-slate-500 truncate max-w-[150px] block">{u.company ?? "—"}</span>
+                        )}
+                      </td>
+                      {/* Role column */}
+                      <td className="px-4 py-4">
+                        {isEditing ? (
+                          <select value={editRole} onChange={(e) => setEditRole(e.target.value as RoleOption)}
+                            className="input-premium text-xs py-1.5">
+                            {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+                          </select>
+                        ) : (
+                          <span
+                            className={`text-[11px] px-2.5 py-0.5 rounded-full font-semibold cursor-default ${ROLE_STYLE[u.role] ?? "bg-slate-100 text-slate-500"}`}
+                            data-tooltip={ROLE_TOOLTIP[u.role]}
+                          >
+                            {u.role}
+                          </span>
+                        )}
+                      </td>
+                      {/* Status column */}
+                      <td className="px-4 py-4">
+                        {isEditing ? (
+                          <button
+                            type="button"
+                            onClick={() => setEditActive((v) => !v)}
+                            className={`text-xs px-3 py-1 rounded-lg font-medium border transition-all ${
+                              editActive
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                : "bg-red-50 text-red-600 border-red-200"
+                            }`}
+                          >
+                            {editActive ? "Active" : "Inactive"}
+                          </button>
+                        ) : (
+                          <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-semibold ${
+                            u.is_active
+                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                              : "bg-red-50 text-red-600 border border-red-200"
+                          }`}>
+                            {u.is_active ? "Active" : "Inactive"}
+                          </span>
+                        )}
+                      </td>
+                      {/* Created column */}
+                      <td className="px-4 py-4 hidden lg:table-cell">
+                        <span className="text-xs text-slate-400 font-mono tabular-nums">{fmt(u.created_at)}</span>
+                      </td>
+                      {/* Actions column */}
+                      <td className="px-5 py-4 text-right">
+                        {deletingId === u.id ? (
+                          <div className="flex items-center justify-end gap-2">
+                            <span className="text-xs text-red-600 font-semibold">Delete?</span>
+                            <button onClick={() => confirmDelete(u.id)}
+                              className="text-xs px-3 py-1 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 transition-colors">
+                              Yes
+                            </button>
+                            <button onClick={() => setDeletingId(null)}
+                              className="text-xs px-3 py-1 bg-slate-100 text-slate-600 rounded-lg font-medium hover:bg-slate-200 transition-colors">
+                              No
+                            </button>
+                          </div>
+                        ) : isEditing ? (
+                          <div className="flex items-center justify-end gap-2">
+                            <button onClick={saveEdit} disabled={editSaving}
+                              data-tooltip="Save changes"
+                              className="btn-brand text-xs px-3 py-1.5 flex items-center gap-1">
+                              {editSaving ? <><span className="btn-spinner" style={{ width: 10, height: 10 }} /> Saving…</> : "💾 Save"}
+                            </button>
+                            <button onClick={() => setEditingId(null)}
+                              className="btn-ghost text-xs px-3 py-1.5">
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={() => startEdit(u)}
+                              data-tooltip="Edit user details"
+                              className="btn-ghost text-xs px-2.5 py-1"
+                            >
+                              ✎ Edit
+                            </button>
+                            {!isSelf && (
+                              <button
+                                onClick={() => setDeletingId(u.id)}
+                                data-tooltip="Delete this user"
+                                className="text-xs px-2.5 py-1 rounded-lg text-red-500 hover:bg-red-50 transition-colors font-medium"
+                              >
+                                Delete
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* ── Summary stats ── */}
+      {users.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          {ROLES.map((r) => {
+            const count = users.filter((u) => u.role === r).length;
+            return (
+              <div key={r} className="bg-white border border-slate-200 rounded-lg p-4">
+                <div className={`inline-flex text-[11px] px-2 py-0.5 rounded-full font-semibold mb-2 ${ROLE_STYLE[r]}`}>{r}</div>
+                <div className="text-2xl font-bold text-slate-900 font-display">{count}</div>
+                <div className="text-xs text-slate-400 mt-0.5">{count === 1 ? "user" : "users"}</div>
+              </div>
+            );
+          })}
+          <div className="bg-white border border-slate-200 rounded-lg p-4">
+            <div className="inline-flex text-[11px] px-2 py-0.5 rounded-full font-semibold mb-2 bg-red-50 text-red-600 border border-red-200">Inactive</div>
+            <div className="text-2xl font-bold text-slate-900 font-display">{users.filter((u) => !u.is_active).length}</div>
+            <div className="text-xs text-slate-400 mt-0.5">deactivated</div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 //  Root App
 // ─────────────────────────────────────────────────────────────────────────────
 export default function App() {
@@ -4505,10 +5030,11 @@ export default function App() {
   const [view, setView] = useState<View>(() => {
     if (typeof window === "undefined") return "login";
     const saved = localStorage.getItem("infynd:lastView");
-    return (saved && ["dashboard","create","detail","analytics","approval","history","tracking","settings"].includes(saved)) ? saved as View : "login";
+    return (saved && ["dashboard","create","detail","analytics","approval","history","tracking","settings","admin"].includes(saved)) ? saved as View : "login";
   });
   const [userEmail, setUserEmail] = useState("");
   const [role, setRole] = useState("VIEWER");
+  const [userCompany, setUserCompany] = useState<string | null>(null);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [campLoading, setCampLoading] = useState(false);
   const [selectedCamp, setSelectedCamp] = useState<Campaign | null>(null);
@@ -4550,9 +5076,10 @@ export default function App() {
       const payload = JSON.parse(atob(tok.split(".")[1]));
       setUserEmail(payload.email ?? "");
       setRole(payload.role ?? "VIEWER");
+      setUserCompany(payload.company ?? null);
       // Restore saved view or default to create
       const saved = localStorage.getItem("infynd:lastView");
-      if (saved && ["dashboard","create","detail","analytics","approval","history","tracking","settings"].includes(saved)) {
+      if (saved && ["dashboard","create","detail","analytics","approval","history","tracking","settings","admin"].includes(saved)) {
         setView(saved as View);
       } else {
         setView("create");
@@ -4574,6 +5101,12 @@ export default function App() {
   function handleLoginSuccess(email: string, r: string) {
     setUserEmail(email);
     setRole(r);
+    // Extract company from the stored JWT
+    try {
+      const tok = getAccessToken();
+      const payload = JSON.parse(atob(tok.split(".")[1]));
+      setUserCompany(payload.company ?? null);
+    } catch { /* ignore */ }
     setView("create"); // ← redirect to create campaign after login
     refreshCampaigns();
     toast(`Welcome, ${email}!`, "success");
@@ -4589,6 +5122,7 @@ export default function App() {
     localStorage.removeItem("infynd:lastView"); // Clear saved view on logout
     setCampaigns([]);
     setSelectedCamp(null);
+    setUserCompany(null);
     lastKnownCount.current = -1;
     setView("login");
     toast("Signed out", "info");
@@ -4734,6 +5268,10 @@ export default function App() {
             onProfileUpdate={handleProfileUpdate}
           />
         );
+      case "admin":
+        return role === "ADMIN" ? (
+          <UsersView toast={toast} currentUserEmail={userEmail} currentUserCompany={userCompany} />
+        ) : null;
       default:
         return null;
     }
@@ -4742,6 +5280,7 @@ export default function App() {
   return (
     <>
       <Toasts toasts={toasts} remove={removeToast} />
+      <TooltipLayer />
       <div className="flex h-screen overflow-hidden bg-[#f8fafc]">
         <Sidebar
           view={view}
